@@ -36,8 +36,9 @@ class IsStaff(IsAuthenticated):
 
 class AdminChatListView(APIView):
     """
-    GET /api/admin/chat/?offset=0&limit=20
-    Faqat foydalanuvchidan Telegram orqali kamida bitta xabar kelgan chatlarni qaytaradi.
+    GET /api/admin/chat/?offset=0&limit=20&search=…
+    Telegram bot orqali kamida bitta submission yuborgan har bir muallif uchun
+    Chat avtomatik yaratiladi va qaytariladi (admin u bilan suhbatni boshlashi mumkin).
     Pagination: offset/limit. Response: { results, has_more, next_offset, total }
     """
     permission_classes = [IsStaff]
@@ -56,13 +57,37 @@ class AdminChatListView(APIView):
             limit = self.DEFAULT_LIMIT
         limit = max(1, min(limit, self.MAX_LIMIT))
 
+        # ── Submission yuborgan har bir Telegram muallif uchun Chat yaratamiz ──
+        # Bu idempotent: mavjud bo'lsa qayta yaratilmaydi.
+        from django.db.models import Q
+        eligible_authors = (
+            Author.objects
+            .filter(telegram_chat_id__isnull=False, submissions__isnull=False)
+            .distinct()
+        )
+        existing_author_ids = set(Chat.objects.values_list('author_id', flat=True))
+        new_chats = [
+            Chat(author=a) for a in eligible_authors
+            if a.id not in existing_author_ids
+        ]
+        if new_chats:
+            Chat.objects.bulk_create(new_chats)
+
+        # ── Asosiy query: faqat eligible (submission yuborgan) authorlar chatlari ──
         qs = (
             Chat.objects
-            .filter(messages__sender='user')
+            .filter(author__in=eligible_authors)
             .select_related('author')
-            .distinct()
             .order_by('-last_message_at', '-created_at')
         )
+
+        search = (request.query_params.get('search') or '').strip()
+        if search:
+            qs = qs.filter(
+                Q(author__name__icontains=search) |
+                Q(author__telegram_username__icontains=search)
+            )
+
         total = qs.count()
         page  = qs[offset:offset + limit]
         data  = ChatListSerializer(page, many=True, context={'request': request}).data

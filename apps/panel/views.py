@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
+from django.conf import settings
 
 from apps.articles.models import Article, ArticleSubmission, Category, Keyword
 from apps.authors.models import Author
@@ -62,11 +63,55 @@ class CurrentUserView(APIView):
 # ── Mualliflar ────────────────────────────────────────────────────────────────
 
 class AdminAuthorListView(APIView):
+    """
+    GET /api/admin/authors/?offset=0&limit=20&search=…
+    Faqat Telegram bot orqali submission yuborgan mualliflarni qaytaradi.
+    Pagination: offset/limit (infinite scroll uchun).
+    """
     permission_classes = [IsStaff]
 
+    DEFAULT_LIMIT = 20
+    MAX_LIMIT     = 100
+
     def get(self, request):
-        qs = Author.objects.prefetch_related('articles').order_by('name')
-        return Response(AdminAuthorSerializer(qs, many=True).data)
+        try:
+            offset = max(0, int(request.query_params.get('offset', 0)))
+        except (TypeError, ValueError):
+            offset = 0
+        try:
+            limit = int(request.query_params.get('limit', self.DEFAULT_LIMIT))
+        except (TypeError, ValueError):
+            limit = self.DEFAULT_LIMIT
+        limit = max(1, min(limit, self.MAX_LIMIT))
+
+        # Faqat Telegram orqali kelganlar (chat_id bor) VA submission yuborganlar
+        qs = (
+            Author.objects
+            .filter(telegram_chat_id__isnull=False, submissions__isnull=False)
+            .distinct()
+            .prefetch_related('articles')
+            .order_by('-created_at')
+        )
+
+        search = (request.query_params.get('search') or '').strip()
+        if search:
+            qs = qs.filter(
+                Q(name__icontains=search) |
+                Q(telegram_username__icontains=search) |
+                Q(org__icontains=search)
+            )
+
+        total = qs.count()
+        page  = qs[offset:offset + limit]
+        data  = AdminAuthorSerializer(page, many=True).data
+
+        next_offset = offset + len(data)
+        return Response({
+            'results':     data,
+            'total':       total,
+            'has_more':    next_offset < total,
+            'next_offset': next_offset,
+        })
 
     def post(self, request):
         s = AdminAuthorSerializer(data=request.data)
@@ -526,33 +571,52 @@ class AdminIssueAssignArticleView(APIView):
         except Article.DoesNotExist:
             return Response({'error': 'Maqola topilmadi'}, status=404)
 
-        was_unpublished = article.issue_id is None
+        prev_issue_id = article.issue_id
         article.issue       = issue
         article.published_at = article.published_at or timezone.now().date()
         article.year        = issue.year
         article.save(update_fields=['issue', 'published_at', 'year', 'updated_at'])
 
         # ── Foydalanuvchiga Telegram orqali xabar ────────────────────────────
-        # Faqat birinchi marta jurnalga kirsa (qayta-qayta xabar bormaslik uchun)
-        if was_unpublished:
-            try:
-                sub = article.submission   # related_name='submission'
-            except ArticleSubmission.DoesNotExist:
-                sub = None
-            if sub and sub.chat_id:
-                # Frontend manzili — settings.SITE_URL bo'lmasa fallback
-                site_url = getattr(settings, 'SITE_URL', 'http://localhost:5173')
-                article_url = f"{site_url}/articles/{article.slug}"
-                issue_label = f"Vol.{issue.volume} №{issue.number} ({issue.year})"
-                tg_send(
-                    sub.chat_id,
-                    f"📰 <b>Maqolangiz jurnalda chiqdi!</b>\n\n"
-                    f"📄 <i>{article.title}</i>\n"
-                    f"📚 {issue_label}\n\n"
-                    f"🔗 <a href=\"{article_url}\">Saytda o'qish</a>",
-                )
+        # Faqat boshqa jurnaldan kelmagan bo'lsa (yangi nashr)
+        if prev_issue_id != issue.pk:
+            self._notify_author(article, issue)
 
         return Response({'success': True, 'article_id': str(article.id), 'issue_id': str(issue.id)})
+
+    def _notify_author(self, article, issue):
+        """Maqolaga bog'liq Telegram chat_id'ni topib xabar yuboradi."""
+        import logging
+        logger = logging.getLogger(__name__)
+
+        chat_ids = set()
+        # 1) Submission orqali
+        try:
+            sub = article.submission
+            if sub and sub.chat_id:
+                chat_ids.add(sub.chat_id)
+        except ArticleSubmission.DoesNotExist:
+            pass
+        # 2) Author.telegram_chat_id orqali (article.authors)
+        for a in article.authors.filter(telegram_chat_id__isnull=False):
+            chat_ids.add(a.telegram_chat_id)
+
+        if not chat_ids:
+            logger.info("Article '%s' jurnal soniga qo'shildi, lekin chat_id topilmadi", article.title)
+            return
+
+        site_url    = getattr(settings, 'SITE_URL', 'http://localhost:5173').rstrip('/')
+        article_url = f"{site_url}/articles/{article.slug}"
+        issue_label = f"Vol.{issue.volume} №{issue.number} ({issue.year})"
+        text = (
+            f"📰 <b>Maqolangiz jurnalda chiqdi!</b>\n\n"
+            f"📄 <i>{article.title}</i>\n"
+            f"📚 {issue_label}\n\n"
+            f"🔗 <a href=\"{article_url}\">Saytda o'qish</a>"
+        )
+        for cid in chat_ids:
+            ok = tg_send(cid, text)
+            logger.info("Jurnal notification → chat_id=%s | ok=%s", cid, ok)
 
 
 class AdminIssueRemoveArticleView(APIView):

@@ -286,7 +286,20 @@ class SubmissionFinalizeView(APIView):
 
         sub.status = 'pending'
         sub.submitted_at = timezone.now()
-        sub.save(update_fields=['status', 'submitted_at', 'updated_at'])
+
+        # ── Author yaratish (yo'q bo'lsa) — endi AdminAuthor/Chat'da ko'rinadi ─
+        from apps.authors.models import Author
+        if not sub.author and sub.chat_id:
+            author, _ = Author.objects.get_or_create(
+                telegram_chat_id=sub.chat_id,
+                defaults={
+                    'name':              sub.tg_name or "Noma'lum muallif",
+                    'telegram_username': sub.tg_username or '',
+                },
+            )
+            sub.author = author
+
+        sub.save(update_fields=['status', 'submitted_at', 'author', 'updated_at'])
 
         # ── Adminlarga rasm + fayl bilan bildirishnoma ───────────────────────
         self._notify_admins(sub)
