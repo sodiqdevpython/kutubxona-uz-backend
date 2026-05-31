@@ -1,0 +1,52 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<h1>❌ Rad etish sababini kiriting</h1>
+<p>Quyidagi <strong>{{ queryset.count }}</strong> ta maqola rad etiladi:</p>
+<ul>
+  {% for sub in queryset %}
+    <li>
+      <strong>{{ sub.tg_name }}</strong>
+      {% if sub.tg_username %}(@{{ sub.tg_username }}){% endif %}
+      {% if sub.title %}— <em>{{ sub.title }}</em>{% endif %}
+    </li>
+  {% endfor %}
+</ul>
+
+<form method="post">
+  {% csrf_token %}
+
+  {# Tanlangan elementlarni qayta yuborish #}
+  {% for sub in queryset %}
+    <input type="hidden" name="{{ action_checkbox_name }}" value="{{ sub.pk }}">
+  {% endfor %}
+  <input type="hidden" name="action" value="reject_submissions">
+  <input type="hidden" name="apply" value="1">
+
+  <div style="margin: 20px 0;">
+    <label for="reject_reason" style="display:block; font-weight:bold; margin-bottom:8px;">
+      Rad etish sababi (foydalanuvchiga yuboriladi):
+    </label>
+    <textarea
+      id="reject_reason"
+      name="reject_reason"
+      rows="4"
+      cols="60"
+      style="font-size:14px; padding:8px; border:1px solid #ccc; border-radius:4px; resize:vertical;"
+      placeholder="Masalan: Maqolada metodologiya bo'limi yetarli emas. Qayta ishlab yuboring."
+    ></textarea>
+    <br>
+    <small style="color:#666;">Bo'sh qoldirsangiz, standart sabab ishlatiladi.</small>
+  </div>
+
+  <div>
+    <button type="submit"
+      style="background:#ba2121; color:white; padding:10px 22px; border:none; border-radius:4px; font-size:14px; cursor:pointer; font-weight:bold;">
+      ❌ Rad etishni tasdiqlash
+    </button>
+    &nbsp;
+    <a href=".." style="padding:10px 16px; font-size:14px; color:#333; text-decoration:none;">Bekor qilish</a>
+  </div>
+</form>
+{% endblock %}
