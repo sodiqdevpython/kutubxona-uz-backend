@@ -157,6 +157,15 @@ else:
         o.strip()
         for o in os.environ.get(
             'CORS_ALLOWED_ORIGINS',
-            'http://localhost:5173,http://127.0.0.1:5173'
+            'https://journalkutubxona.uz,https://www.journalkutubxona.uz'
         ).split(',')
     ]
+
+# CSRF sozlamalari
+CSRF_TRUSTED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get(
+        'CSRF_TRUSTED_ORIGINS',
+        'https://journalkutubxona.uz,https://www.journalkutubxona.uz,https://api.journalkutubxona.uz'
+    ).split(',')
+]
