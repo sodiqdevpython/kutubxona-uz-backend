@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     'apps.journals',
     'apps.comments',
     'apps.panel',
+    'apps.chat',
 ]
 
 MIDDLEWARE = [

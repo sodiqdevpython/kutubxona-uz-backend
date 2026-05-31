@@ -56,6 +56,9 @@ urlpatterns = [
     # Admin panel API (SimpleJWT himoyasi)
     path('api/admin/', include('apps.panel.urls')),
 
+    # Chat (admin + bot)
+    path('api/', include('apps.chat.urls')),
+
     # OpenAPI schema + interactive docs
     path('api/schema/',  SpectacularAPIView.as_view(),                       name='schema'),
     path('api/docs/',    SpectacularSwaggerView.as_view(url_name='schema'),  name='swagger-ui'),

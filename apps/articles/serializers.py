@@ -24,6 +24,7 @@ class ArticleListSerializer(serializers.ModelSerializer):
     author_label  = serializers.CharField(read_only=True)
     author_names  = serializers.SerializerMethodField()
     image_url     = serializers.SerializerMethodField()
+    keywords      = serializers.SerializerMethodField()
 
     class Meta:
         model  = Article
@@ -32,8 +33,12 @@ class ArticleListSerializer(serializers.ModelSerializer):
             'category', 'authors', 'author_label', 'author_names',
             'status', 'year', 'quarter',
             'pages', 'min_read', 'cites', 'views',
-            'img_variant', 'image_url', 'published_at',
+            'img_variant', 'image_url', 'keywords', 'published_at',
         )
+
+    @extend_schema_field({'type': 'array', 'items': {'type': 'string'}})
+    def get_keywords(self, obj):
+        return list(obj.keywords.values_list('name', flat=True))
 
     @extend_schema_field(AuthorBriefSerializer(many=True))
     def get_authors(self, obj):
