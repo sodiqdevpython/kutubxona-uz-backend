@@ -169,3 +169,6 @@ CSRF_TRUSTED_ORIGINS = [
         'https://journalkutubxona.uz,https://www.journalkutubxona.uz,https://api.journalkutubxona.uz'
     ).split(',')
 ]
+
+DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50 MB
