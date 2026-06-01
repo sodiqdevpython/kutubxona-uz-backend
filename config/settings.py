@@ -158,8 +158,25 @@ else:
         for o in os.environ.get(
             'CORS_ALLOWED_ORIGINS',
             'https://journalkutubxona.uz,https://www.journalkutubxona.uz'
-        ).split(',')
+        ).split(',') if o.strip()
     ]
+    # JWT token bilan ishlatish uchun
+    CORS_ALLOW_CREDENTIALS = True
+    CORS_ALLOW_HEADERS = [
+        'accept', 'accept-encoding', 'authorization', 'content-type',
+        'dnt', 'origin', 'user-agent', 'x-csrftoken', 'x-requested-with',
+    ]
+    CORS_ALLOW_METHODS = ['DELETE', 'GET', 'OPTIONS', 'PATCH', 'POST', 'PUT']
+
+# ── CSRF (production) ────────────────────────────────────────────────────────
+# Django 4+ — POST/PATCH'lar uchun frontend domeni CSRF_TRUSTED_ORIGINS'da bo'lishi shart
+CSRF_TRUSTED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get(
+        'CSRF_TRUSTED_ORIGINS',
+        'https://journalkutubxona.uz,https://www.journalkutubxona.uz,https://api.journalkutubxona.uz'
+    ).split(',') if o.strip()
+]
 
 # CSRF sozlamalari
 CSRF_TRUSTED_ORIGINS = [

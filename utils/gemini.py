@@ -87,12 +87,20 @@ def extract_metadata(text: str) -> dict:
     headers = {'Content-Type': 'application/json', 'X-goog-api-key': api_key}
 
     try:
-        resp = requests.post(url, headers=headers, json=body, timeout=45)
+        # Production'da gunicorn timeout 120s — biz 90s'da to'xtaymiz va aniq xato qaytaramiz
+        resp = requests.post(url, headers=headers, json=body, timeout=(10, 90))
+    except requests.Timeout:
+        return {'ok': False, 'error': 'Gemini API javobi juda uzoq cho‘zildi (90s+). Qaytadan urinib ko‘ring.'}
     except requests.RequestException as exc:
         return {'ok': False, 'error': f'Tarmoq xatosi: {exc}'}
 
     if resp.status_code != 200:
-        return {'ok': False, 'error': f'API xatosi ({resp.status_code})'}
+        # Foydalanuvchiga aniq xato (Gemini quota/rate limit/key xato — debug uchun)
+        try:
+            details = resp.json().get('error', {}).get('message', '')[:200]
+        except Exception:
+            details = resp.text[:200]
+        return {'ok': False, 'error': f'Gemini API xatosi ({resp.status_code}): {details}'}
 
     try:
         raw = resp.json()['candidates'][0]['content']['parts'][0]['text']

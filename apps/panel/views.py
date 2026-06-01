@@ -309,6 +309,9 @@ class AdminSubmissionAIExtractView(APIView):
     permission_classes = [IsStaff]
 
     def post(self, request, pk):
+        import logging
+        logger = logging.getLogger(__name__)
+
         from utils.gemini import extract_metadata
         from utils.extract import extract_text
 
@@ -318,28 +321,43 @@ class AdminSubmissionAIExtractView(APIView):
             return Response({'error': 'Topilmadi'}, status=404)
 
         # Matn — saqlangan bo'lsa o'shani, bo'lmasa fayldan qayta ajratamiz
-        text = sub.extracted_text
-        if not text and sub.source_file:
-            text = extract_text(sub.source_file)
-            if text:
-                sub.extracted_text = text
-                sub.save(update_fields=['extracted_text', 'updated_at'])
+        try:
+            text = sub.extracted_text
+            if not text and sub.source_file:
+                text = extract_text(sub.source_file)
+                if text:
+                    sub.extracted_text = text
+                    sub.save(update_fields=['extracted_text', 'updated_at'])
+        except Exception as exc:
+            logger.exception("AI extract: faylni o‘qib bo‘lmadi")
+            return Response({'error': f'Faylni o‘qib bo‘lmadi: {exc}'}, status=500)
 
         if not text:
-            return Response({'error': 'Fayldan matn ajratib bo\'lmadi'}, status=400)
+            return Response({'error': 'Fayldan matn ajratib bo‘lmadi'}, status=400)
 
-        result = extract_metadata(text)
+        # Gemini API — har qanday xato (timeout, key, quota) — JSON javob
+        try:
+            result = extract_metadata(text)
+        except Exception as exc:
+            logger.exception("AI extract: kutilmagan xato")
+            return Response({'error': f'Server xatosi: {exc}'}, status=500)
+
         if not result.get('ok'):
+            logger.warning("AI extract: %s", result.get('error'))
             return Response({'error': result.get('error', 'AI xatosi')}, status=502)
 
         # Submissionga yozish
-        sub.title             = result['title'] or sub.title
-        sub.keywords          = ', '.join(result['keywords'])
-        sub.abstract          = result['abstract']
-        sub.references        = result['references']
-        sub.extracted_authors = ', '.join(result['authors'])
-        sub.ai_filled         = True
-        sub.save()
+        try:
+            sub.title             = result['title'] or sub.title
+            sub.keywords          = ', '.join(result['keywords'])
+            sub.abstract          = result['abstract']
+            sub.references        = result['references']
+            sub.extracted_authors = ', '.join(result['authors'])
+            sub.ai_filled         = True
+            sub.save()
+        except Exception as exc:
+            logger.exception("AI extract: submissionga yozib bo‘lmadi")
+            return Response({'error': f'Saqlashda xato: {exc}'}, status=500)
 
         return Response(AdminSubmissionSerializer(sub, context={'request': request}).data)
 
