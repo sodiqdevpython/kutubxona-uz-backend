@@ -303,8 +303,9 @@ class AdminSubmissionApproveView(APIView):
 class AdminSubmissionAIExtractView(APIView):
     """
     POST /api/admin/submissions/<pk>/ai-extract/
-    Gemini yordamida fayldan sarlavha, mualliflar, kalit so'zlar, annotatsiya,
-    adabiyotlarni ajratib submissionga yozadi. Category AI ajratmaydi (admin tanlaydi).
+    Local LLM (Ollama) yordamida fayldan sarlavha, mualliflar, kalit so'zlar,
+    annotatsiya, adabiyotlarni ajratib submissionga yozadi. Fayl (PDF/DOCX)
+    to'g'ridan-to'g'ri LLM ga yuboriladi. Category AI ajratmaydi (admin tanlaydi).
     """
     permission_classes = [IsStaff]
 
@@ -312,32 +313,19 @@ class AdminSubmissionAIExtractView(APIView):
         import logging
         logger = logging.getLogger(__name__)
 
-        from utils.gemini import extract_metadata
-        from utils.extract import extract_text
+        from utils.local_llm import extract_metadata_from_file
 
         try:
             sub = ArticleSubmission.objects.get(pk=pk)
         except ArticleSubmission.DoesNotExist:
             return Response({'error': 'Topilmadi'}, status=404)
 
-        # Matn — saqlangan bo'lsa o'shani, bo'lmasa fayldan qayta ajratamiz
-        try:
-            text = sub.extracted_text
-            if not text and sub.source_file:
-                text = extract_text(sub.source_file)
-                if text:
-                    sub.extracted_text = text
-                    sub.save(update_fields=['extracted_text', 'updated_at'])
-        except Exception as exc:
-            logger.exception("AI extract: faylni o‘qib bo‘lmadi")
-            return Response({'error': f'Faylni o‘qib bo‘lmadi: {exc}'}, status=500)
+        if not sub.source_file:
+            return Response({'error': 'Fayl topilmadi'}, status=400)
 
-        if not text:
-            return Response({'error': 'Fayldan matn ajratib bo‘lmadi'}, status=400)
-
-        # Gemini API — har qanday xato (timeout, key, quota) — JSON javob
+        # Local LLM — har qanday xato (upload, timeout, query) — JSON javob
         try:
-            result = extract_metadata(text)
+            result = extract_metadata_from_file(sub.source_file)
         except Exception as exc:
             logger.exception("AI extract: kutilmagan xato")
             return Response({'error': f'Server xatosi: {exc}'}, status=500)
@@ -655,3 +643,45 @@ class AdminIssueRemoveArticleView(APIView):
         article.published_at = None
         article.save(update_fields=['issue', 'published_at', 'updated_at'])
         return Response(status=204)
+
+
+class AdminArticleTrainAIView(APIView):
+    """
+    POST   /api/admin/articles/<uuid:pk>/train-ai/  — maqola faylini local LLM ga yuklab
+                                                     doc_id ni saqlaydi (uzoq operatsiya).
+    DELETE /api/admin/articles/<uuid:pk>/train-ai/  — saqlangan doc_id ni tozalaydi
+                                                     (publik chat o'chadi).
+    """
+    permission_classes = [IsStaff]
+
+    def post(self, request, pk):
+        from utils.local_llm import upload_and_wait
+        try:
+            article = Article.objects.get(pk=pk)
+        except Article.DoesNotExist:
+            return Response({'error': 'Maqola topilmadi'}, status=404)
+
+        if not article.source_file:
+            return Response({'error': 'Bu maqolada manba fayl yo\'q'}, status=400)
+
+        doc_id, err = upload_and_wait(article.source_file)
+        if err:
+            return Response({'error': err}, status=502)
+
+        article.llm_document_id = doc_id
+        article.save(update_fields=['llm_document_id', 'updated_at'])
+        return Response({
+            'id':              str(article.pk),
+            'slug':            article.slug,
+            'llm_document_id': doc_id,
+            'ai_ready':        True,
+        })
+
+    def delete(self, request, pk):
+        try:
+            article = Article.objects.get(pk=pk)
+        except Article.DoesNotExist:
+            return Response({'error': 'Maqola topilmadi'}, status=404)
+        article.llm_document_id = ''
+        article.save(update_fields=['llm_document_id', 'updated_at'])
+        return Response({'id': str(article.pk), 'ai_ready': False})

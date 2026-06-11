@@ -48,8 +48,12 @@ class AdminSubmissionSerializer(serializers.ModelSerializer):
     article_slug     = serializers.SerializerMethodField()
     article_category = serializers.SerializerMethodField()
     article_issue    = serializers.SerializerMethodField()
+    article_ai_ready = serializers.SerializerMethodField()
     source_file_url  = serializers.SerializerMethodField()
     image_url        = serializers.SerializerMethodField()
+
+    def get_article_ai_ready(self, obj) -> bool:
+        return bool(obj.article and obj.article.llm_document_id)
 
     def get_author_name(self, obj):
         return obj.author.name if obj.author else (obj.tg_name or 'Noma\'lum')
@@ -102,7 +106,7 @@ class AdminSubmissionSerializer(serializers.ModelSerializer):
             'status', 'reject_reason', 'created_at', 'submitted_at',
             'author_name',
             'article_id', 'article_title', 'article_slug',
-            'article_category', 'article_issue',
+            'article_category', 'article_issue', 'article_ai_ready',
             'source_file_url', 'image_url',
         )
 

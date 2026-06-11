@@ -145,9 +145,12 @@ BOT_SECRET = os.environ.get('BOT_SECRET', 'kutubxona-bot-secret-change-me')
 # ── Sayt manzili (Telegram link xabarlari uchun) ──────────────────────────────
 SITE_URL = os.environ.get('SITE_URL', 'http://localhost:5173')
 
-# ── Gemini AI ─────────────────────────────────────────────────────────────────
+# ── Gemini AI (eski, hozir ishlatilmayapti) ───────────────────────────────────
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 GEMINI_MODEL   = os.environ.get('GEMINI_MODEL', 'gemini-flash-latest')
+
+# ── Local LLM (Ollama) — AI extract uchun ─────────────────────────────────────
+LOCAL_LLM_BASE_URL = os.environ.get('LOCAL_LLM_BASE_URL', 'https://sodiqdevpython.jprq.live')
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 if DEBUG:

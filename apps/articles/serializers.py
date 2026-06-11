@@ -62,11 +62,16 @@ class ArticleDetailSerializer(ArticleListSerializer):
     source_file_url = serializers.SerializerMethodField()
     keywords        = serializers.SerializerMethodField()
     references      = serializers.CharField(read_only=True)
+    ai_ready        = serializers.SerializerMethodField()
 
     class Meta(ArticleListSerializer.Meta):
         fields = ArticleListSerializer.Meta.fields + (
-            'content', 'source_file_url', 'keywords', 'references', 'issue',
+            'content', 'source_file_url', 'keywords', 'references', 'issue', 'ai_ready',
         )
+
+    @extend_schema_field({'type': 'boolean'})
+    def get_ai_ready(self, obj) -> bool:
+        return bool(obj.llm_document_id)
 
     @extend_schema_field({'type': 'array', 'items': {'type': 'object'}})
     def get_keywords(self, obj):

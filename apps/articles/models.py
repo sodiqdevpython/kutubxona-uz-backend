@@ -123,6 +123,13 @@ class Article(BaseModel):
     )
 
     # ── Meta ──────────────────────────────────────────────────────────────────
+    # Local LLM hujjat IDsi — birinchi savol berilganda upload qilinadi va shu yerga yoziladi.
+    # Keyingi savollar shu IDga query qilib, qayta upload qilmaydi.
+    llm_document_id = models.CharField(
+        max_length=200, blank=True, default='',
+        verbose_name='Local LLM document ID'
+    )
+
     status      = models.CharField(max_length=10, choices=STATUS_CHOICES, default='open', verbose_name='Holat')
     year        = models.PositiveIntegerField(verbose_name='Yil', default=2026)
     quarter     = models.PositiveSmallIntegerField(default=1, verbose_name='Chorak (1–4)')

@@ -134,6 +134,53 @@ class ArticleViewSet(viewsets.ReadOnlyModelViewSet):
             'issues':   issues_count,
         })
 
+    @action(detail=True, methods=['post'], url_path='ask', permission_classes=[AllowAny])
+    def ask(self, request, slug=None):
+        """
+        POST /api/articles/<slug>/ask/  body: {"question": "..."}
+        Faqat admin AI ga o'qitgan (llm_document_id mavjud) maqolalar uchun ishlaydi.
+        Hujjat upload qilinmaydi — admin /api/admin/articles/<id>/train-ai/ orqali oldindan o'qitadi.
+        """
+        article  = self.get_object()
+        question = (request.data.get('question') or '').strip()
+
+        if not question:
+            return Response({'error': 'Savol bo\'sh'}, status=400)
+        if len(question) > 500:
+            return Response({'error': 'Savol juda uzun (500 belgidan ortiq)'}, status=400)
+
+        doc_id = (article.llm_document_id or '').strip()
+        if not doc_id:
+            return Response(
+                {'error': 'Bu maqola AI bilan o\'qitilmagan. Adminga murojaat qiling.'},
+                status=400,
+            )
+
+        # Sodda IP rate limit — 1 IP / 15 sekundda 1 ta savol
+        from django.core.cache import cache
+        xff = request.META.get('HTTP_X_FORWARDED_FOR', '')
+        ip  = (xff.split(',')[0].strip() if xff else request.META.get('REMOTE_ADDR', '')) or 'unknown'
+        rl_key = f'ask:{article.pk}:{ip}'
+        if not cache.add(rl_key, 1, timeout=15):
+            return Response({'error': 'Juda tez-tez savol berayapsiz. Bir oz kuting.'}, status=429)
+
+        from utils.local_llm import ask as llm_ask
+        answer, err = llm_ask(doc_id, question, source_language='uz')
+
+        if err == 'not_found':
+            # LLM hujjatni unutgan — admin qayta o'qitishi kerak
+            article.llm_document_id = ''
+            article.save(update_fields=['llm_document_id', 'updated_at'])
+            return Response(
+                {'error': 'AI hujjati eskirgan. Admin qayta o\'qitishi kerak.'},
+                status=410,
+            )
+
+        if err:
+            return Response({'error': err}, status=502)
+
+        return Response({'answer': answer})
+
     @action(detail=True, url_path='related')
     def related(self, request, slug=None):
         """
