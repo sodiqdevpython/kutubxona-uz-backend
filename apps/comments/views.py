@@ -15,7 +15,7 @@ class CommentViewSet(
 ):
     queryset         = Comment.objects.filter(is_approved=True, parent=None)
     filter_backends  = [DjangoFilterBackend]
-    filterset_fields = ['article']
+    filterset_fields = ['article', 'issue']
 
     def get_serializer_class(self):
         if self.request.method == 'POST':

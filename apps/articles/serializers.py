@@ -117,6 +117,8 @@ class ArticleDetailSerializer(ArticleListSerializer):
             'season':          i.season,
             'date_label':      i.date_label,
             'cover_image_url': cover,
+            'journal_id':      str(i.journal_id) if i.journal_id else None,
+            'journal_title':   i.journal.title if i.journal_id else None,
         }
 
 

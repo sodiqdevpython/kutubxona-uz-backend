@@ -34,6 +34,11 @@ class Issue(BaseModel):
         verbose_name='Muqova rasmi (ixtiyoriy)',
         help_text='Yuklanmasa, palette ranglari asosida default cover ko\'rsatiladi.'
     )
+    pdf_file = models.FileField(
+        upload_to='journals/pdfs/%Y/', null=True, blank=True,
+        verbose_name='PDF fayl (to\'liq son)',
+        help_text='Jurnal sonining to\'liq PDF nusxasi. Yuklansa, son sahifasida ochiladi.'
+    )
 
     class Meta:
         verbose_name        = 'Jurnal soni'

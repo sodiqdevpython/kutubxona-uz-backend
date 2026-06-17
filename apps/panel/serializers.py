@@ -122,6 +122,7 @@ class AdminIssueSerializer(serializers.ModelSerializer):
     journal_title   = serializers.SerializerMethodField()
     article_count   = serializers.SerializerMethodField()
     cover_image_url = serializers.SerializerMethodField()
+    pdf_file_url    = serializers.SerializerMethodField()
 
     def get_journal_title(self, obj):
         return obj.journal.title if obj.journal else None
@@ -135,12 +136,18 @@ class AdminIssueSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         return request.build_absolute_uri(obj.cover_image.url) if request else obj.cover_image.url
 
+    def get_pdf_file_url(self, obj):
+        if not obj.pdf_file:
+            return None
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.pdf_file.url) if request else obj.pdf_file.url
+
     class Meta:
         model  = Issue
         fields = (
             'id', 'journal', 'journal_title',
             'volume', 'number', 'year', 'season', 'date_label',
             'palette', 'is_current', 'is_upcoming',
-            'article_count', 'cover_image_url', 'created_at',
+            'article_count', 'cover_image_url', 'pdf_file_url', 'created_at',
         )
-        read_only_fields = ('id', 'created_at', 'journal_title', 'article_count', 'cover_image_url')
+        read_only_fields = ('id', 'created_at', 'journal_title', 'article_count', 'cover_image_url', 'pdf_file_url')

@@ -4,7 +4,7 @@ from .models import Comment
 
 @admin.register(Comment)
 class CommentAdmin(admin.ModelAdmin):
-    list_display  = ('name', 'article', 'parent', 'is_approved', 'created_at')
+    list_display  = ('name', 'article', 'issue', 'parent', 'is_approved', 'created_at')
     list_filter   = ('is_approved',)
     list_editable = ('is_approved',)
     search_fields = ('name', 'text')

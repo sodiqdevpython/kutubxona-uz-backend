@@ -23,7 +23,8 @@ urlpatterns = [
     # ── Yo'nalishlar ──────────────────────────────────────────────────────────
     path('categories/', views.AdminCategoryListView.as_view(), name='admin-category-list'),
 
-    # ── Maqola AI (o'qitish / o'chirish) ─────────────────────────────────────
+    # ── Maqola (qo'lda yaratish + AI o'qitish/o'chirish) ─────────────────────
+    path('articles/',                    views.AdminArticleCreateView.as_view(),  name='admin-article-create'),
     path('articles/<uuid:pk>/train-ai/', views.AdminArticleTrainAIView.as_view(), name='admin-article-train-ai'),
 
     # ── Jurnal sonlari ────────────────────────────────────────────────────────

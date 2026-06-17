@@ -7,7 +7,7 @@ from .models import Journal, Issue
 from .serializers import JournalSerializer, IssueSerializer
 
 
-class JournalViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+class JournalViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     queryset         = Journal.objects.prefetch_related('issues')
     serializer_class = JournalSerializer
     pagination_class = None

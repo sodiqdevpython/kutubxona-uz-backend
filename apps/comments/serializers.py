@@ -21,4 +21,14 @@ class CommentSerializer(serializers.ModelSerializer):
 class CommentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Comment
-        fields = ('article', 'parent', 'name', 'text')
+        fields = ('article', 'issue', 'parent', 'name', 'text')
+
+    def validate(self, attrs):
+        # Reply (parent) bo'lsa, ota-izohning maqola/sonidan oladi
+        parent = attrs.get('parent')
+        if parent:
+            attrs['article'] = parent.article
+            attrs['issue']   = parent.issue
+        if not attrs.get('article') and not attrs.get('issue'):
+            raise serializers.ValidationError("Izoh maqola yoki jurnal soniga biriktirilishi kerak.")
+        return attrs

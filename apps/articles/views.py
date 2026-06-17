@@ -59,7 +59,7 @@ class ArticleViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = (
         Article.objects
         .filter(issue__isnull=False)
-        .select_related('category', 'issue')
+        .select_related('category', 'issue', 'issue__journal')
         .prefetch_related('authors')
         .distinct()
     )

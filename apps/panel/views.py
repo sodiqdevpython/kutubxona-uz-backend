@@ -507,10 +507,16 @@ class AdminIssueListView(APIView):
         s = AdminIssueSerializer(data=data, context={'request': request})
         s.is_valid(raise_exception=True)
         issue = s.save(journal=journal)
-        # cover_image multipart bo'lsa
+        # cover_image / pdf_file multipart bo'lsa
+        upd = []
         if 'cover_image' in request.FILES:
             issue.cover_image = request.FILES['cover_image']
-            issue.save(update_fields=['cover_image', 'updated_at'])
+            upd.append('cover_image')
+        if 'pdf_file' in request.FILES:
+            issue.pdf_file = request.FILES['pdf_file']
+            upd.append('pdf_file')
+        if upd:
+            issue.save(update_fields=[*upd, 'updated_at'])
         return Response(AdminIssueSerializer(issue, context={'request': request}).data, status=201)
 
 
@@ -542,10 +548,16 @@ class AdminIssueDetailView(APIView):
         s = AdminIssueSerializer(issue, data=request.data, partial=True, context={'request': request})
         s.is_valid(raise_exception=True)
         s.save()
-        # cover_image fayl (multipart) bo'lsa alohida saqlaymiz
+        # cover_image / pdf_file fayl (multipart) bo'lsa alohida saqlaymiz
+        upd = []
         if 'cover_image' in request.FILES:
             issue.cover_image = request.FILES['cover_image']
-            issue.save(update_fields=['cover_image', 'updated_at'])
+            upd.append('cover_image')
+        if 'pdf_file' in request.FILES:
+            issue.pdf_file = request.FILES['pdf_file']
+            upd.append('pdf_file')
+        if upd:
+            issue.save(update_fields=[*upd, 'updated_at'])
         return Response(AdminIssueSerializer(issue, context={'request': request}).data)
 
     def delete(self, request, pk):
@@ -643,6 +655,84 @@ class AdminIssueRemoveArticleView(APIView):
         article.published_at = None
         article.save(update_fields=['issue', 'published_at', 'updated_at'])
         return Response(status=204)
+
+
+class AdminArticleCreateView(APIView):
+    """
+    POST /api/admin/articles/  (multipart)
+    Maqolani qo'lda yaratish. Muallif ixtiyoriy (noma'lum bo'lishi mumkin).
+    Maydonlar:
+      title*          — sarlavha
+      author_names    — mualliflar (matn, vergul bilan; ixtiyoriy)
+      excerpt         — annotatsiya (ixtiyoriy)
+      keywords        — kalit so'zlar (vergul bilan; ixtiyoriy)
+      category_id / category_name — yo'nalish (ixtiyoriy)
+      source_file     — PDF yoki DOCX (ixtiyoriy)
+      issue_id        — darhol jurnal soniga biriktirish (ixtiyoriy)
+    """
+    from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+    parser_classes     = [MultiPartParser, FormParser, JSONParser]
+    permission_classes = [IsStaff]
+
+    def post(self, request):
+        title = (request.data.get('title') or '').strip()
+        if not title:
+            return Response({'error': 'Sarlavha talab qilinadi'}, status=400)
+
+        # ── Category ──────────────────────────────────────────────────────────
+        category = None
+        cat_id   = request.data.get('category_id')
+        cat_name = (request.data.get('category_name') or '').strip()
+        if cat_id:
+            category = Category.objects.filter(pk=cat_id).first()
+        elif cat_name:
+            category, _ = Category.objects.get_or_create(name=cat_name)
+
+        # ── Jurnal soni (ixtiyoriy) ───────────────────────────────────────────
+        issue = None
+        issue_id = request.data.get('issue_id')
+        if issue_id:
+            issue = Issue.objects.filter(pk=issue_id).first()
+            if not issue:
+                return Response({'error': 'Jurnal soni topilmadi'}, status=404)
+
+        article = Article(
+            title=title,
+            excerpt=(request.data.get('excerpt') or '').strip(),
+            references=(request.data.get('references') or '').strip(),
+            author_names=(request.data.get('author_names') or '').strip(),
+            category=category,
+            status=request.data.get('status') or 'open',
+            year=issue.year if issue else timezone.now().year,
+        )
+        if 'source_file' in request.FILES:
+            article.source_file = request.FILES['source_file']
+        if issue:
+            article.issue = issue
+            article.published_at = timezone.now().date()
+        article.save()
+
+        # Keywords → Keyword jadvali
+        for name in Keyword.parse_csv(request.data.get('keywords') or ''):
+            kw = Keyword.objects.filter(name__iexact=name).first() or Keyword.objects.create(name=name)
+            article.keywords.add(kw)
+
+        # Fayl → HTML (article detail fallback uchun)
+        if article.source_file:
+            try:
+                html = article.parse_source_file()
+                if html:
+                    article.content = html
+                    article.save(update_fields=['content', 'updated_at'])
+            except Exception:
+                pass
+
+        return Response({
+            'id':        str(article.id),
+            'title':     article.title,
+            'slug':      article.slug,
+            'issue_id':  str(issue.id) if issue else None,
+        }, status=201)
 
 
 class AdminArticleTrainAIView(APIView):

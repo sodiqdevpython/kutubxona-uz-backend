@@ -5,7 +5,13 @@ from utils.models import BaseModel
 class Comment(BaseModel):
     article  = models.ForeignKey(
         'articles.Article', on_delete=models.CASCADE,
-        related_name='comments', verbose_name='Maqola'
+        related_name='comments', verbose_name='Maqola',
+        null=True, blank=True,
+    )
+    issue    = models.ForeignKey(
+        'journals.Issue', on_delete=models.CASCADE,
+        related_name='comments', verbose_name='Jurnal soni',
+        null=True, blank=True,
     )
     parent   = models.ForeignKey(
         'self', on_delete=models.CASCADE, null=True, blank=True,
