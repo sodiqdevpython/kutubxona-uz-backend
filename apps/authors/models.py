@@ -66,11 +66,12 @@ class Author(BaseModel):
 
     @property
     def article_count(self):
-        return self.articles.filter(status='open').count()
+        # Faqat jurnal soniga kiritilgan (chop etilgan) maqolalar — ro'yxat bilan mos.
+        return self.articles.filter(issue__isnull=False).count()
 
     @property
     def total_views(self):
-        return self.articles.aggregate(
+        return self.articles.filter(issue__isnull=False).aggregate(
             total=models.Sum('views')
         )['total'] or 0
 

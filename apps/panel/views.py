@@ -580,9 +580,17 @@ class AdminIssueDetailView(APIView):
         issue = self._get(pk)
         if not issue:
             return Response({'error': 'Topilmadi'}, status=404)
-        # Maqolalarni issue dan uzish (ular saqlanib qoladi, lekin ko'rinmaydi)
-        issue.articles.update(issue=None, published_at=None)
-        issue.delete()
+        # Bot orqali yuborilgan (submission'li) maqolalar SAQLANADI — faqat uziladi,
+        # PDF'dan ajratilgan / qo'lda kiritilgan maqolalar esa TO'LIQ o'chiriladi
+        # (aks holda ular profilga bog'liq bo'lib qolib ketadi).
+        for art in issue.articles.all():
+            if ArticleSubmission.objects.filter(article=art).exists():
+                art.issue = None
+                art.published_at = None
+                art.save(update_fields=['issue', 'published_at', 'updated_at'])
+            else:
+                art.delete()
+        issue.delete()  # qolgan ParsedArticle satrlari CASCADE bilan o'chadi
         return Response(status=204)
 
 
