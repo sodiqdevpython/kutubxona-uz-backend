@@ -66,8 +66,10 @@ class ArticleViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends  = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class  = ArticleFilter
     search_fields    = ['title', 'excerpt', 'author_names', 'authors__name', 'keywords__name']
-    ordering_fields  = ['created_at', 'views', 'cites', 'published_at']
-    ordering         = ['-created_at']
+    ordering_fields  = ['created_at', 'views', 'cites', 'published_at', 'issue__year', 'issue__number']
+    # Default: arxiv yili (jurnal soni) bo'yicha — eng yangi yil tepada,
+    # create/assign vaqti bo'yicha emas.
+    ordering         = ['-issue__year', '-issue__number', '-published_at', '-created_at']
     lookup_field     = 'slug'
 
     def get_serializer_class(self):
@@ -124,7 +126,7 @@ class ArticleViewSet(viewsets.ReadOnlyModelViewSet):
         articles_count = Article.objects.filter(issue__isnull=False).count()
         authors_count = (
             Author.objects
-            .filter(telegram_chat_id__isnull=False, articles__issue__isnull=False)
+            .filter(articles__issue__isnull=False)
             .distinct().count()
         )
         issues_count = Issue.objects.filter(is_upcoming=False).count()

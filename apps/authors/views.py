@@ -12,12 +12,12 @@ from .serializers import AuthorListSerializer, AuthorDetailSerializer
 
 class AuthorViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    Profil egalari — faqat Telegram bot orqali yuborgan VA kamida bitta
-    maqolasi jurnalda chop etilgan mualliflar. AI ajratgan ismlar profil olmaydi.
+    Profil egalari — kamida bitta maqolasi jurnalda chop etilgan mualliflar
+    (Telegram bot, qo'lda yoki PDF parser orqali). AI ajratgan ismlar profil olmaydi.
     """
     queryset = (
         Author.objects
-        .filter(telegram_chat_id__isnull=False, articles__issue__isnull=False)
+        .filter(articles__issue__isnull=False)
         .prefetch_related('articles')
         .distinct()
     )

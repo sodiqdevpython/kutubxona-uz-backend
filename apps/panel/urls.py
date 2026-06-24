@@ -33,4 +33,10 @@ urlpatterns = [
     path('issues/<uuid:pk>/',                          views.AdminIssueDetailView.as_view(),        name='admin-issue-detail'),
     path('issues/<uuid:pk>/assign/',                   views.AdminIssueAssignArticleView.as_view(), name='admin-issue-assign'),
     path('issues/<uuid:pk>/articles/<uuid:article_id>/', views.AdminIssueRemoveArticleView.as_view(), name='admin-issue-remove'),
+
+    # ── PDF parser (maqola + muallif ajratish) ──────────────────────────────────
+    path('issues/<uuid:pk>/parse-pdf/', views.AdminIssueParsePdfView.as_view(),   name='admin-issue-parse'),
+    path('issues/<uuid:pk>/parsed/',    views.AdminIssueParsedListView.as_view(), name='admin-issue-parsed'),
+    path('parsed/<uuid:pk>/',           views.AdminParsedDetailView.as_view(),    name='admin-parsed-detail'),
+    path('parsed/<uuid:pk>/save/',      views.AdminParsedSaveView.as_view(),      name='admin-parsed-save'),
 ]

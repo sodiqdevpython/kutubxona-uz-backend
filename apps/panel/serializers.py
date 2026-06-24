@@ -1,24 +1,93 @@
 from rest_framework import serializers
-from apps.articles.models import Article, ArticleSubmission, Category
+from apps.articles.models import Article, ArticleSubmission, Category, ParsedArticle
 from apps.authors.models import Author
 from apps.journals.models import Issue
 
 
+def _abs_url(field, context):
+    """ImageField/FileField -> absolute URL (request bor bo'lsa) yoki None."""
+    if not field:
+        return None
+    request = context.get('request') if context else None
+    return request.build_absolute_uri(field.url) if request else field.url
+
+
 class AdminAuthorSerializer(serializers.ModelSerializer):
     article_count = serializers.SerializerMethodField()
+    avatar_url    = serializers.SerializerMethodField()
 
     def get_article_count(self, obj):
         return obj.articles.count()
+
+    def get_avatar_url(self, obj):
+        return _abs_url(obj.avatar, self.context)
 
     class Meta:
         model  = Author
         fields = (
             'id', 'name', 'slug', 'initials', 'role', 'org', 'degree', 'bio',
-            'avatar_idx',
+            'avatar_idx', 'avatar_url', 'source',
             'telegram_chat_id', 'telegram_username',
             'article_count', 'created_at',
         )
-        read_only_fields = ('id', 'slug', 'created_at', 'telegram_chat_id', 'telegram_username')
+        read_only_fields = (
+            'id', 'slug', 'created_at', 'source',
+            'telegram_chat_id', 'telegram_username',
+        )
+
+
+class AuthorMatchSerializer(serializers.ModelSerializer):
+    """Dedup uchun mavjud (qo'lda/parser) profil — admin rasm+ma'lumot bilan ko'radi."""
+    article_count = serializers.SerializerMethodField()
+    avatar_url    = serializers.SerializerMethodField()
+
+    def get_article_count(self, obj):
+        return obj.articles.count()
+
+    def get_avatar_url(self, obj):
+        return _abs_url(obj.avatar, self.context)
+
+    class Meta:
+        model  = Author
+        fields = (
+            'id', 'name', 'slug', 'initials', 'role', 'org', 'degree', 'bio',
+            'avatar_idx', 'avatar_url', 'source', 'article_count',
+        )
+
+
+class ParsedArticleSerializer(serializers.ModelSerializer):
+    article_pdf_url = serializers.SerializerMethodField()
+    photo_url       = serializers.SerializerMethodField()
+    matches         = serializers.SerializerMethodField()
+    article_slug    = serializers.SerializerMethodField()
+
+    def get_article_pdf_url(self, obj):
+        return _abs_url(obj.article_pdf, self.context)
+
+    def get_photo_url(self, obj):
+        return _abs_url(obj.photo, self.context)
+
+    def get_article_slug(self, obj):
+        return obj.article.slug if obj.article else None
+
+    def get_matches(self, obj):
+        from .dedup import author_candidates
+        cands = author_candidates(obj.author_name)
+        return AuthorMatchSerializer(cands, many=True, context=self.context).data
+
+    class Meta:
+        model  = ParsedArticle
+        fields = (
+            'id', 'order', 'section', 'title', 'author_name', 'extra_info',
+            'start_page', 'end_page', 'status',
+            'article_pdf_url', 'photo_url', 'matches',
+            'article_id', 'article_slug', 'created_at',
+        )
+        read_only_fields = (
+            'id', 'order', 'start_page', 'end_page', 'status',
+            'article_pdf_url', 'photo_url', 'matches',
+            'article_id', 'article_slug', 'created_at',
+        )
 
 
 class AdminArticleInIssueSerializer(serializers.ModelSerializer):

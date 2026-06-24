@@ -303,3 +303,53 @@ class ArticleSubmission(BaseModel):
                 seen.add(name.lower())
                 out.append(name)
         return out
+
+
+# ── Jurnal soni PDF'idan parser ajratgan maqola nomzodlari ─────────────────────
+
+class ParsedArticle(BaseModel):
+    """
+    Jurnal soni (Issue) PDF'idan `utils.journal_parser` ajratgan maqola nomzodi.
+    Admin ko'rib chiqib, muallifni moslashtirib (mavjud profil yoki yangi),
+    "Saqlash" bosgandagina `Article` ga aylanadi.
+    """
+    STATUS_CHOICES = [
+        ('pending', 'Kutilmoqda'),     # admin hali ko'rib chiqmagan
+        ('saved',   'Saqlangan'),      # Article yaratildi
+        ('skipped', "O'tkazib yuborilgan"),
+    ]
+
+    issue       = models.ForeignKey(
+        'journals.Issue', on_delete=models.CASCADE,
+        related_name='parsed_articles', verbose_name='Jurnal soni'
+    )
+    order       = models.PositiveSmallIntegerField(default=0, verbose_name='Tartib')
+    section     = models.CharField(max_length=300, blank=True, verbose_name="Bo'lim")
+    title       = models.CharField(max_length=500, blank=True, verbose_name='Sarlavha')
+    author_name = models.CharField(max_length=200, blank=True, verbose_name='Ism familiya')
+    extra_info  = models.TextField(blank=True, verbose_name="Qo'shimcha ma'lumot")
+    start_page  = models.PositiveIntegerField(null=True, blank=True, verbose_name='Boshlanish bet')
+    end_page    = models.PositiveIntegerField(null=True, blank=True, verbose_name='Tugash bet')
+
+    article_pdf = models.FileField(
+        upload_to='parsed/%Y/%m/', null=True, blank=True,
+        verbose_name='Ajratilgan maqola PDF'
+    )
+    photo       = models.ImageField(
+        upload_to='parsed/photos/%Y/%m/', null=True, blank=True,
+        verbose_name='Muallif rasmi'
+    )
+
+    status      = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending', verbose_name='Holat')
+    article     = models.OneToOneField(
+        Article, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='parsed_source', verbose_name='Yaratilgan maqola'
+    )
+
+    class Meta:
+        verbose_name        = 'Ajratilgan maqola (parser)'
+        verbose_name_plural = 'Ajratilgan maqolalar (parser)'
+        ordering            = ['order']
+
+    def __str__(self):
+        return f'{self.order}. {self.author_name} — {self.title[:40]}'

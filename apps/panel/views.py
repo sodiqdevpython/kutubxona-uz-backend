@@ -8,7 +8,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.conf import settings
 
-from apps.articles.models import Article, ArticleSubmission, Category, Keyword
+from apps.articles.models import Article, ArticleSubmission, Category, Keyword, ParsedArticle
 from apps.authors.models import Author
 from apps.journals.models import Journal, Issue
 from utils.telegram import send_message as tg_send
@@ -18,6 +18,7 @@ from .serializers import (
     AdminSubmissionSerializer,
     AdminIssueSerializer,
     AdminCategorySerializer,
+    ParsedArticleSerializer,
 )
 
 
@@ -65,9 +66,11 @@ class CurrentUserView(APIView):
 class AdminAuthorListView(APIView):
     """
     GET /api/admin/authors/?offset=0&limit=20&search=…
-    Faqat Telegram bot orqali submission yuborgan mualliflarni qaytaradi.
+    Telegram orqali submission yuborgan mualliflar + qo'lda/parser profillar.
     Pagination: offset/limit (infinite scroll uchun).
     """
+    from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+    parser_classes     = [MultiPartParser, FormParser, JSONParser]
     permission_classes = [IsStaff]
 
     DEFAULT_LIMIT = 20
@@ -84,10 +87,13 @@ class AdminAuthorListView(APIView):
             limit = self.DEFAULT_LIMIT
         limit = max(1, min(limit, self.MAX_LIMIT))
 
-        # Faqat Telegram orqali kelganlar (chat_id bor) VA submission yuborganlar
+        # Telegram orqali submission yuborganlar YOKI qo'lda/parser profillari
         qs = (
             Author.objects
-            .filter(telegram_chat_id__isnull=False, submissions__isnull=False)
+            .filter(
+                Q(telegram_chat_id__isnull=False, submissions__isnull=False) |
+                Q(telegram_chat_id__isnull=True)
+            )
             .distinct()
             .prefetch_related('articles')
             .order_by('-created_at')
@@ -103,7 +109,7 @@ class AdminAuthorListView(APIView):
 
         total = qs.count()
         page  = qs[offset:offset + limit]
-        data  = AdminAuthorSerializer(page, many=True).data
+        data  = AdminAuthorSerializer(page, many=True, context={'request': request}).data
 
         next_offset = offset + len(data)
         return Response({
@@ -114,16 +120,23 @@ class AdminAuthorListView(APIView):
         })
 
     def post(self, request):
-        s = AdminAuthorSerializer(data=request.data)
+        """Qo'lda muallif yaratish — to'g'ridan-to'g'ri tasdiqlangan, Telegramsiz."""
+        s = AdminAuthorSerializer(data=request.data, context={'request': request})
         s.is_valid(raise_exception=True)
-        author = s.save()
+        # Manba 'manual' — Telegram maydonlari hech qachon o'rnatilmaydi (read-only)
+        author = s.save(source='manual')
+        if 'avatar' in request.FILES:
+            author.avatar = request.FILES['avatar']
+            author.save(update_fields=['avatar', 'updated_at'])
         return Response(
-            AdminAuthorSerializer(author).data,
+            AdminAuthorSerializer(author, context={'request': request}).data,
             status=201,
         )
 
 
 class AdminAuthorDetailView(APIView):
+    from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+    parser_classes     = [MultiPartParser, FormParser, JSONParser]
     permission_classes = [IsStaff]
 
     def _get(self, pk):
@@ -136,10 +149,13 @@ class AdminAuthorDetailView(APIView):
         obj = self._get(pk)
         if not obj:
             return Response({'error': 'Topilmadi'}, status=404)
-        s = AdminAuthorSerializer(obj, data=request.data, partial=True)
+        s = AdminAuthorSerializer(obj, data=request.data, partial=True, context={'request': request})
         s.is_valid(raise_exception=True)
         s.save()
-        return Response(s.data)
+        if 'avatar' in request.FILES:
+            obj.avatar = request.FILES['avatar']
+            obj.save(update_fields=['avatar', 'updated_at'])
+        return Response(AdminAuthorSerializer(obj, context={'request': request}).data)
 
     def delete(self, request, pk):
         obj = self._get(pk)
@@ -775,3 +791,214 @@ class AdminArticleTrainAIView(APIView):
         article.llm_document_id = ''
         article.save(update_fields=['llm_document_id', 'updated_at'])
         return Response({'id': str(article.pk), 'ai_ready': False})
+
+
+# ── Jurnal soni PDF'ini parserlash (maqola + muallif ajratish) ────────────────
+
+class AdminIssueParsePdfView(APIView):
+    """
+    POST /api/admin/issues/<pk>/parse-pdf/
+    Jurnal soni PDF'idan (issue.pdf_file yoki request'dagi pdf_file) maqolalarni
+    ajratadi va har biri uchun ParsedArticle (pending) yaratadi.
+    """
+    from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+    parser_classes     = [MultiPartParser, FormParser, JSONParser]
+    permission_classes = [IsStaff]
+
+    def post(self, request, pk):
+        import logging
+        logger = logging.getLogger(__name__)
+        from django.core.files.base import ContentFile
+        from utils.journal_parser import parse_journal
+
+        try:
+            issue = Issue.objects.get(pk=pk)
+        except Issue.DoesNotExist:
+            return Response({'error': 'Jurnal soni topilmadi'}, status=404)
+
+        src = request.FILES.get('pdf_file') or (issue.pdf_file if issue.pdf_file else None)
+        if not src:
+            return Response(
+                {'error': "PDF topilmadi. Avval jurnal soniga to'liq PDF yuklang."},
+                status=400,
+            )
+
+        try:
+            candidates = parse_journal(src)
+        except Exception as exc:
+            logger.exception('parse-pdf: kutilmagan xato')
+            return Response({'error': f'Parser xatosi: {exc}'}, status=500)
+
+        if not candidates:
+            return Response(
+                {'error': "Parser maqola ajrata olmadi. PDF mundarija/format mos kelmasligi "
+                          "mumkin — maqolalarni qo'lda qo'shing."},
+                status=422,
+            )
+
+        # Eski (hali saqlanmagan) nomzodlarni tozalab, qaytadan yaratamiz
+        issue.parsed_articles.filter(status='pending').delete()
+
+        created = []
+        for c in candidates:
+            pa = ParsedArticle(
+                issue=issue, order=c['order'], section=c['section'] or '',
+                title=c['title'] or '', author_name=c['author_name'] or '',
+                extra_info=c['extra_info'] or '',
+                start_page=c['start_page'], end_page=c['end_page'],
+            )
+            base = f"issue-{issue.pk}-{c['order']:02d}"
+            pa.article_pdf.save(f'{base}.pdf', ContentFile(c['article_pdf_bytes']), save=False)
+            if c.get('photo_png_bytes'):
+                pa.photo.save(f'{base}.png', ContentFile(c['photo_png_bytes']), save=False)
+            pa.save()
+            created.append(pa)
+
+        data = ParsedArticleSerializer(created, many=True, context={'request': request}).data
+        return Response({'results': data, 'count': len(data)}, status=201)
+
+
+class AdminIssueParsedListView(APIView):
+    """GET /api/admin/issues/<pk>/parsed/ — shu son uchun ajratilgan nomzodlar."""
+    permission_classes = [IsStaff]
+
+    def get(self, request, pk):
+        try:
+            issue = Issue.objects.get(pk=pk)
+        except Issue.DoesNotExist:
+            return Response({'error': 'Jurnal soni topilmadi'}, status=404)
+        qs = issue.parsed_articles.exclude(status='skipped').order_by('order')
+        return Response({
+            'results': ParsedArticleSerializer(qs, many=True, context={'request': request}).data,
+        })
+
+
+class AdminParsedDetailView(APIView):
+    """
+    PATCH  /api/admin/parsed/<pk>/  — nomzod maydonlarini tahrirlash (qo'lda to'ldirish).
+    DELETE /api/admin/parsed/<pk>/  — nomzodni o'tkazib yuborish (o'chirish).
+    """
+    permission_classes = [IsStaff]
+    EDITABLE = ('title', 'author_name', 'extra_info', 'section')
+
+    def _get(self, pk):
+        try:
+            return ParsedArticle.objects.get(pk=pk)
+        except ParsedArticle.DoesNotExist:
+            return None
+
+    def patch(self, request, pk):
+        pa = self._get(pk)
+        if not pa:
+            return Response({'error': 'Topilmadi'}, status=404)
+        for f in self.EDITABLE:
+            if f in request.data:
+                setattr(pa, f, request.data[f])
+        pa.save()
+        return Response(ParsedArticleSerializer(pa, context={'request': request}).data)
+
+    def delete(self, request, pk):
+        pa = self._get(pk)
+        if not pa:
+            return Response({'error': 'Topilmadi'}, status=404)
+        pa.delete()
+        return Response(status=204)
+
+
+class AdminParsedSaveView(APIView):
+    """
+    POST /api/admin/parsed/<pk>/save/
+    Body: {
+      author_mode: 'existing' | 'new' | 'none',
+      author_id?: uuid,                    # existing uchun
+      author?: {name, role, org, degree, bio},  # new uchun
+      title?, author_name?, extra_info?    # tahrirlangan maydonlar (ixtiyoriy)
+    }
+    Nomzoddan Article yaratadi va muallifni biriktiradi (mavjud yoki yangi profil).
+    """
+    permission_classes = [IsStaff]
+
+    def post(self, request, pk):
+        try:
+            pa = ParsedArticle.objects.select_related('issue').get(pk=pk)
+        except ParsedArticle.DoesNotExist:
+            return Response({'error': 'Topilmadi'}, status=404)
+
+        if pa.status == 'saved' and pa.article_id:
+            return Response({'error': 'Bu nomzod allaqachon saqlangan'}, status=400)
+
+        # Tahrirlangan maydonlarni qabul qilamiz
+        for f in ('title', 'author_name', 'extra_info', 'section'):
+            if f in request.data and request.data.get(f) is not None:
+                setattr(pa, f, request.data.get(f))
+
+        issue = pa.issue
+        mode  = request.data.get('author_mode', 'new')
+
+        # ── Muallifni aniqlash ────────────────────────────────────────────────
+        author = None
+        if mode == 'existing':
+            author = (
+                Author.objects
+                .filter(pk=request.data.get('author_id'), telegram_chat_id__isnull=True)
+                .first()
+            )
+            if not author:
+                return Response(
+                    {'error': 'Tanlangan profil topilmadi (yoki Telegramga tegishli)'},
+                    status=400,
+                )
+            # Profilda rasm yo'q bo'lsa — parser ajratgan rasmni qo'yamiz
+            if not author.avatar and pa.photo:
+                author.avatar = pa.photo.name
+                author.save(update_fields=['avatar', 'updated_at'])
+        elif mode == 'new':
+            ap   = request.data.get('author') or {}
+            if not isinstance(ap, dict):
+                ap = {}
+            name = (ap.get('name') or pa.author_name or '').strip() or "Noma'lum muallif"
+            author = Author(
+                source='parser',
+                name=name,
+                role=(ap.get('role') or '').strip(),
+                org=(ap.get('org') or '').strip(),
+                degree=(ap.get('degree') or '').strip(),
+                bio=(ap.get('bio') or pa.extra_info or '').strip(),
+            )
+            if pa.photo:
+                author.avatar = pa.photo.name
+            author.save()
+        # mode == 'none' -> profil biriktirilmaydi (faqat matn nomi)
+
+        # ── Maqola yaratish ───────────────────────────────────────────────────
+        article = Article(
+            title=pa.title or (f'{pa.author_name} maqolasi' if pa.author_name else 'Maqola'),
+            status='open',
+            year=issue.year,
+            img_variant=(pa.order or 1) % 4,
+            issue=issue,
+            published_at=timezone.now().date(),
+        )
+        if pa.article_pdf:
+            article.source_file = pa.article_pdf.name
+        if not author:
+            article.author_names = pa.author_name or ''
+        article.save()
+
+        if author:
+            article.authors.add(author)
+
+        # PDF/DOCX -> HTML (detalda fallback; PDF bo'lsa PdfViewer ko'rsatadi)
+        try:
+            html = article.parse_source_file()
+            if html:
+                article.content = html
+                article.save(update_fields=['content', 'updated_at'])
+        except Exception:
+            pass
+
+        pa.status  = 'saved'
+        pa.article = article
+        pa.save()
+
+        return Response(ParsedArticleSerializer(pa, context={'request': request}).data)

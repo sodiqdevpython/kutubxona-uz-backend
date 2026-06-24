@@ -4,9 +4,21 @@ from utils.models import BaseModel
 
 
 class Author(BaseModel):
+    SOURCE_CHOICES = [
+        ('telegram', 'Telegram bot'),
+        ('manual',   "Qo'lda (admin)"),
+        ('parser',   'PDF parser'),
+    ]
+
     name             = models.CharField(max_length=200, verbose_name='F.I.Sh.')
     slug             = models.SlugField(max_length=220, unique=True, blank=True)
     initials         = models.CharField(max_length=5,   verbose_name='Bosh harflar', blank=True)
+    # Profil qayerdan yaratilgan. 'telegram' bo'lmaganlar (manual/parser) — tahririyat
+    # tomonidan to'g'ridan-to'g'ri tasdiqlangan va ularga Telegram profili ulanmaydi.
+    source           = models.CharField(
+        max_length=10, choices=SOURCE_CHOICES, default='manual',
+        verbose_name='Manba'
+    )
     role             = models.CharField(max_length=200, blank=True, verbose_name='Lavozim')
     org              = models.CharField(max_length=300, blank=True, verbose_name='Tashkilot')
     degree           = models.CharField(max_length=200, blank=True, verbose_name='Ilmiy daraja')
