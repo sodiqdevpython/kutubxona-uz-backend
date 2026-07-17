@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     'apps.comments',
     'apps.panel',
     'apps.chat',
+    'apps.central_asia',
 ]
 
 MIDDLEWARE = [

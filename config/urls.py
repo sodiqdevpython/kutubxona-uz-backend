@@ -59,6 +59,9 @@ urlpatterns = [
     # Chat (admin + bot)
     path('api/', include('apps.chat.urls')),
 
+    # Central Asia (einfolib.uz'dan parse qilinadi)
+    path('api/', include('apps.central_asia.urls')),
+
     # OpenAPI schema + interactive docs
     path('api/schema/',  SpectacularAPIView.as_view(),                       name='schema'),
     path('api/docs/',    SpectacularSwaggerView.as_view(url_name='schema'),  name='swagger-ui'),
