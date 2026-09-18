@@ -1,16 +1,16 @@
 """
 Hamkorlar uchun hujjat sahifasi — `/api/partner/docs/`.
 
-Oddiy sahifa: hamkor `client_id` (login) + `client_secret` (parol) bilan
-kiradi, tepada shu hamkor uchun yangi access/refresh, pastda 3 ta endpoint
-(ro'yxat, maqola, access yangilash) — misollar va real javob namunasi bilan.
+Hamkor `client_id` (login) + `client_secret` (parol) bilan kiradi. Sahifada:
+  • tepada shu hamkor uchun yangi access/refresh (nusxalash uchun),
+  • pastda drf-spectacular Swagger UI — faqat 3 ta hamkor endpointi
+    (ro'yxat, maqola, access yangilash); «Try it out» avtomatik shu access
+    token bilan ishlaydi.
 
 Sessiya oddiy Django sessiyasi; hamkor o'chirilsa yoki tokenlari bekor
 qilinsa sessiya ham tugaydi. Kirish sahifasida CAPTCHA (`.env` dagi
 CAPTCHA_* kalitlari) — admin login bilan bir xil sozlama.
 """
-import json
-
 from django.conf import settings
 from django.core.cache import cache
 from django.shortcuts import redirect, render
@@ -18,20 +18,27 @@ from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.cache import never_cache
+from drf_spectacular.views import SpectacularAPIView
+from rest_framework.permissions import BasePermission
 
 from utils import captcha
 from utils.request_ip import client_ip
 
 from .models import PartnerClient
-from .serializers import PartnerArticleDetailSerializer, PartnerArticleListSerializer
 from .tokens import issue_pair
 from .utils import partner_api_base
-from .views import published_articles
 
 SESSION_KEY    = 'partner_docs_client'      # PartnerClient.pk
 SESSION_TV     = 'partner_docs_tv'          # kirish paytidagi token_version
 LOGIN_ATTEMPTS = 10                         # bitta IP dan 10 daqiqada
 LOGIN_WINDOW   = 600
+
+# Swagger'da ko'rinadigan yo'llar — boshqasi chiqmaydi
+DOCS_PATHS = {
+    '/api/partner/articles/',
+    '/api/partner/articles/{id}/',
+    '/api/partner/auth/refresh/',
+}
 
 
 def _current_client(request) -> PartnerClient | None:
@@ -48,21 +55,6 @@ def _current_client(request) -> PartnerClient | None:
     return client
 
 
-def _urls(request) -> dict:
-    base = partner_api_base(request)
-    return {
-        'api_base':    base,
-        'list_url':    f'{base}/api/partner/articles/',
-        'detail_url':  f'{base}/api/partner/articles/<id>/',
-        'refresh_url': f'{base}/api/partner/auth/refresh/',
-        'docs_url':    f'{base}/api/partner/docs/',
-    }
-
-
-def _pretty(data) -> str:
-    return json.dumps(data, ensure_ascii=False, indent=2)
-
-
 # ── Kirish / chiqish ─────────────────────────────────────────────────────────
 
 @method_decorator(never_cache, name='dispatch')
@@ -73,7 +65,6 @@ class PartnerDocsLoginView(View):
         return render(request, self.template_name, {
             'captcha': captcha.public_config(),
             'error':   None,
-            **_urls(request),
             **extra,
         }, status=status)
 
@@ -133,40 +124,43 @@ class PartnerDocsView(View):
             request.session.flush()
             return redirect('partner-docs-login')
 
-        # Real javob namunalari — birinchi chop etilgan maqola
-        qs      = published_articles()
-        sample  = qs.first()
-        ctx_ser = {'request': request}
-        if sample is not None:
-            list_example = {
-                'count':    qs.count(),
-                'next':     None,
-                'previous': None,
-                'results':  [PartnerArticleListSerializer(sample, context=ctx_ser).data],
-            }
-            detail_example = PartnerArticleDetailSerializer(sample, context=ctx_ser).data
-            sample_id      = str(sample.pk)
-        else:
-            list_example   = {'count': 0, 'next': None, 'previous': None, 'results': []}
-            detail_example = None
-            sample_id      = '<id>'
-
-        tokens = issue_pair(client)
-        urls   = _urls(request)
         return render(request, self.template_name, {
-            'client':         client,
-            'tokens':         tokens,
-            'logout_url':     reverse('partner-docs-logout'),
-            'access_hours':   round(settings.PARTNER_ACCESS_LIFETIME.total_seconds() / 3600, 1),
-            'refresh_days':   settings.PARTNER_REFRESH_LIFETIME.days,
-            'sample_id':      sample_id,
-            'detail_sample_url': f"{urls['api_base']}/api/partner/articles/{sample_id}/",
-            'list_example':   _pretty(list_example),
-            'detail_example': _pretty(detail_example) if detail_example else None,
-            'refresh_example': _pretty({
-                'token_type': 'Bearer', 'access': 'eyJ…', 'refresh': 'eyJ…',
-                'access_expires_in': int(settings.PARTNER_ACCESS_LIFETIME.total_seconds()),
-                'refresh_expires_in': int(settings.PARTNER_REFRESH_LIFETIME.total_seconds()),
-            }),
-            **urls,
+            'client':       client,
+            'tokens':       issue_pair(client),
+            'api_base':     partner_api_base(request),
+            'schema_url':   reverse('partner-schema'),
+            'logout_url':   reverse('partner-docs-logout'),
+            'access_hours': round(settings.PARTNER_ACCESS_LIFETIME.total_seconds() / 3600, 1),
+            'refresh_days': settings.PARTNER_REFRESH_LIFETIME.days,
         })
+
+
+# ── OpenAPI sxemasi — faqat 3 ta hamkor endpointi ────────────────────────────
+
+class PartnerDocsSession(BasePermission):
+    """Sxema faqat docs sahifasiga kirgan hamkorga beriladi."""
+    def has_permission(self, request, view):
+        return _current_client(request) is not None
+
+
+def keep_docs_paths(endpoints, **kwargs):
+    """drf-spectacular preprocessing hook — DOCS_PATHS dan boshqasini tashlab yuboradi."""
+    return [e for e in endpoints if e[0] in DOCS_PATHS]
+
+
+class PartnerSchemaView(SpectacularAPIView):
+    authentication_classes = []
+    permission_classes     = [PartnerDocsSession]
+    urlconf                = 'apps.partner.docs_urlconf'
+    serve_include_schema   = False
+    custom_settings = {
+        'TITLE':       'Kutubxona.uz — Partner API',
+        'DESCRIPTION': (
+            "Chop etilgan maqolalar ro'yxati, bitta maqola (fayl manzili bilan) va "
+            "access tokenni yangilash. Har so'rovga `Authorization: Bearer <access>` "
+            "kerak — bu sahifada u avtomatik qo'yilgan."
+        ),
+        'VERSION':             '1.0',
+        'SCHEMA_PATH_PREFIX':  '/api/partner',
+        'PREPROCESSING_HOOKS': ['apps.partner.docs.keep_docs_paths'],
+    }

@@ -205,6 +205,7 @@ class PartnerArticleListView(ListAPIView):
     throttle_scope         = 'partner'
     serializer_class       = PartnerArticleListSerializer
     pagination_class       = PartnerPagination
+    filter_backends        = []          # global search/ordering parametrlari bu yerda yo'q
 
     def get_queryset(self):
         return published_articles()
@@ -228,6 +229,7 @@ class PartnerArticleDetailView(RetrieveAPIView):
     throttle_scope         = 'partner'
     serializer_class       = PartnerArticleDetailSerializer
     lookup_field           = 'pk'
+    lookup_url_kwarg       = 'id'
 
     def get_queryset(self):
         return published_articles()
@@ -247,10 +249,10 @@ class PartnerArticleFileView(APIView):
     permission_classes     = [IsPartner]
     throttle_scope         = 'partner'
 
-    def get(self, request, pk, filename=None):
+    def get(self, request, id, filename=None):
         # `filename` — faqat manzil to'liq va tushunarli bo'lishi uchun
         # (detal javobidagi file_url shu ko'rinishda); tekshirilmaydi.
-        article = published_articles().filter(pk=pk).first()
+        article = published_articles().filter(pk=id).first()
         if article is None or not article.source_file:
             raise Http404('Maqola topilmadi yoki fayli yo\'q')
 
