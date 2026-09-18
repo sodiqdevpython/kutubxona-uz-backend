@@ -28,23 +28,22 @@
   <form class="card" method="post" autocomplete="off">
     {% csrf_token %}
     <div class="brand">Kutubxona<b>.UZ</b></div>
-    <h1>Partner API — hujjat</h1>
-    <p>Sizga berilgan <code>client_id</code> va <code>client_secret</code> bilan kiring.</p>
+    <h1>Partner API</h1>
 
-    <label for="cid">client_id (login)</label>
+    <label for="cid">login</label>
     <input id="cid" name="client_id" value="{{ client_id|default:'' }}" required autofocus>
 
-    <label for="sec">client_secret (parol)</label>
+    <label for="sec">parol</label>
     <input id="sec" name="client_secret" type="password" required>
+
+    {% if captcha.enabled %}
+      <div class="{{ captcha.widget_class }}" data-sitekey="{{ captcha.site_key }}" style="margin-top:16px"></div>
+      <script src="{{ captcha.script_url }}" async defer></script>
+    {% endif %}
 
     {% if error %}<div class="err">{{ error }}</div>{% endif %}
 
     <button type="submit">Kirish</button>
-
-    <div class="foot">
-      Kirgach: faqat hamkor endpointlari hujjati, tayyor access/refresh tokenlar va
-      «Try it out». Kalitlaringiz yo'qolgan bo'lsa — Kutubxona.uz tahririyatiga yozing.
-    </div>
   </form>
 </body>
 </html>

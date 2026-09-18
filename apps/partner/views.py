@@ -3,11 +3,12 @@ Hamkor (tashqi xizmat) API'si — /api/partner/
 
   POST /api/partner/auth/token/            client_id + client_secret → access + refresh
   POST /api/partner/auth/refresh/          refresh → yangi access + refresh
-  GET  /api/partner/articles/              chop etilgan maqolalar ro'yxati (yangidan eskiga)
-  GET  /api/partner/articles/<slug>/       bitta maqola: sarlavha + fayl ma'lumoti
-  GET  /api/partner/articles/<slug>/file/  maqolaning haqiqiy fayli (PDF/DOCX)
+  GET  /api/partner/articles/                  chop etilgan maqolalar ro'yxati (yangidan eskiga)
+  GET  /api/partner/articles/<id>/             bitta maqola: sarlavha + file_url (to'liq manzil)
+  GET  /api/partner/articles/<id>/file/<nom>   maqolaning haqiqiy fayli (PDF/DOCX)
+  GET  /api/partner/docs/                      hamkor hujjat sahifasi (client_id/secret bilan kiriladi)
 
-Beriladigan ma'lumot ATAYLAB cheklangan: slug, sarlavha, sana va fayl.
+Beriladigan ma'lumot ATAYLAB cheklangan: id, sarlavha, sana va fayl.
 Abstrakt, tarkib, mualliflar, kalit so'zlar va statistika chiqmaydi.
 """
 import logging
@@ -17,7 +18,6 @@ import os
 from django.db.models import DateField, F
 from django.db.models.functions import Cast, Coalesce
 from django.http import FileResponse, Http404
-from django.utils.dateparse import parse_date
 
 from drf_spectacular.utils import (
     OpenApiExample, OpenApiParameter, OpenApiResponse, extend_schema,
@@ -56,19 +56,15 @@ class IsPartner(BasePermission):
 
 
 class PartnerPagination(PageNumberPagination):
-    page_size             = 50
-    page_size_query_param = 'page_size'
-    max_page_size         = 200
+    """50 tadan, faqat `?page=N` — boshqa parametr yo'q (hamkor uchun sodda)."""
+    page_size = 50
 
     def get_paginated_response(self, data):
         return Response({
-            'count':     self.page.paginator.count,
-            'page':      self.page.number,
-            'page_size': self.get_page_size(self.request),
-            'num_pages': self.page.paginator.num_pages,
-            'next':      self.get_next_link(),
-            'previous':  self.get_previous_link(),
-            'results':   data,
+            'count':    self.page.paginator.count,
+            'next':     self.get_next_link(),
+            'previous': self.get_previous_link(),
+            'results':  data,
         })
 
 
@@ -196,18 +192,11 @@ class PartnerTokenRefreshView(APIView):
     tags=['Partner API'],
     summary='Maqolalar ro\'yxati',
     description=(
-        'Chop etilgan va fayli mavjud maqolalar — eng yangisidan eskisiga.\n\n'
-        'Har bir element: `slug`, `title`, `published_at`. Boshqa ma\'lumot berilmaydi.\n'
-        'To\'liq faylni olish uchun `slug` bo\'yicha detal endpointiga murojaat qiling.'
+        'Chop etilgan va fayli mavjud maqolalar — eng yangisidan eskisiga, 50 tadan.\n\n'
+        'Har bir element: `id`, `title`, `published_at`. Boshqa ma\'lumot berilmaydi.\n'
+        'Faylni olish uchun `id` bo\'yicha detal endpointiga murojaat qiling.'
     ),
-    parameters=[
-        OpenApiParameter('page',      int, description='Sahifa raqami'),
-        OpenApiParameter('page_size', int, description='Sahifadagi element soni (max 200)'),
-        OpenApiParameter(
-            'since', str,
-            description='YYYY-MM-DD — shu sanadan keyin chop etilganlari (inkremental sinxronizatsiya uchun)',
-        ),
-    ],
+    parameters=[OpenApiParameter('page', int, description='Sahifa raqami')],
     responses={200: PartnerArticleListSerializer(many=True)},
 )
 class PartnerArticleListView(ListAPIView):
@@ -218,21 +207,15 @@ class PartnerArticleListView(ListAPIView):
     pagination_class       = PartnerPagination
 
     def get_queryset(self):
-        qs = published_articles()
-        since = (self.request.query_params.get('since') or '').strip()
-        if since:
-            parsed = parse_date(since)
-            if parsed:
-                qs = qs.filter(sort_date__gte=parsed)
-        return qs
+        return published_articles()
 
 
 @extend_schema(
     tags=['Partner API'],
     summary='Bitta maqola',
     description=(
-        'Maqolaning sarlavhasi va faylga oid ma\'lumot. Fayl `file.url` orqali '
-        'yuklab olinadi (o\'sha token bilan).'
+        'Maqolaning sarlavhasi va fayli. `file_url` — faylning to\'liq tayyor '
+        'manzili, o\'sha token bilan to\'g\'ridan-to\'g\'ri yuklab olinadi.'
     ),
     responses={
         200: PartnerArticleDetailSerializer,
@@ -244,7 +227,7 @@ class PartnerArticleDetailView(RetrieveAPIView):
     permission_classes     = [IsPartner]
     throttle_scope         = 'partner'
     serializer_class       = PartnerArticleDetailSerializer
-    lookup_field           = 'slug'
+    lookup_field           = 'pk'
 
     def get_queryset(self):
         return published_articles()
@@ -264,8 +247,10 @@ class PartnerArticleFileView(APIView):
     permission_classes     = [IsPartner]
     throttle_scope         = 'partner'
 
-    def get(self, request, slug):
-        article = published_articles().filter(slug=slug).first()
+    def get(self, request, pk, filename=None):
+        # `filename` — faqat manzil to'liq va tushunarli bo'lishi uchun
+        # (detal javobidagi file_url shu ko'rinishda); tekshirilmaydi.
+        article = published_articles().filter(pk=pk).first()
         if article is None or not article.source_file:
             raise Http404('Maqola topilmadi yoki fayli yo\'q')
 

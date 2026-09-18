@@ -1,32 +1,32 @@
 """
-Hamkorlar uchun alohida hujjat sahifasi — `/api/partner/docs/`.
+Hamkorlar uchun hujjat sahifasi — `/api/partner/docs/`.
 
-Faqat hamkor endpointlari ko'rinadigan Swagger UI. Kirish uchun hamkorning
-mavjud `client_id` + `client_secret` juftligi ishlatiladi (alohida Django
-foydalanuvchisi yo'q). Kirgach:
-  • yangi access + refresh tokenlar ko'rsatiladi (nusxalash uchun),
-  • Swagger avtomatik shu access bilan avtorizatsiya qilinadi — «Try it out»
-    darhol ishlaydi.
+Oddiy sahifa: hamkor `client_id` (login) + `client_secret` (parol) bilan
+kiradi, tepada shu hamkor uchun yangi access/refresh, pastda 3 ta endpoint
+(ro'yxat, maqola, access yangilash) — misollar va real javob namunasi bilan.
 
 Sessiya oddiy Django sessiyasi; hamkor o'chirilsa yoki tokenlari bekor
-qilinsa sessiya ham tugaydi.
+qilinsa sessiya ham tugaydi. Kirish sahifasida CAPTCHA (`.env` dagi
+CAPTCHA_* kalitlari) — admin login bilan bir xil sozlama.
 """
+import json
+
 from django.conf import settings
-from django.contrib import messages
 from django.core.cache import cache
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.cache import never_cache
-from drf_spectacular.views import SpectacularAPIView
-from rest_framework.permissions import BasePermission
 
+from utils import captcha
 from utils.request_ip import client_ip
 
 from .models import PartnerClient
+from .serializers import PartnerArticleDetailSerializer, PartnerArticleListSerializer
 from .tokens import issue_pair
 from .utils import partner_api_base
+from .views import published_articles
 
 SESSION_KEY    = 'partner_docs_client'      # PartnerClient.pk
 SESSION_TV     = 'partner_docs_tv'          # kirish paytidagi token_version
@@ -53,12 +53,14 @@ def _urls(request) -> dict:
     return {
         'api_base':    base,
         'list_url':    f'{base}/api/partner/articles/',
-        'detail_url':  f'{base}/api/partner/articles/<slug>/',
-        'file_url':    f'{base}/api/partner/articles/<slug>/file/',
-        'token_url':   f'{base}/api/partner/auth/token/',
+        'detail_url':  f'{base}/api/partner/articles/<id>/',
         'refresh_url': f'{base}/api/partner/auth/refresh/',
         'docs_url':    f'{base}/api/partner/docs/',
     }
+
+
+def _pretty(data) -> str:
+    return json.dumps(data, ensure_ascii=False, indent=2)
 
 
 # ── Kirish / chiqish ─────────────────────────────────────────────────────────
@@ -67,31 +69,41 @@ def _urls(request) -> dict:
 class PartnerDocsLoginView(View):
     template_name = 'partner/docs_login.html'
 
+    def _render(self, request, status=200, **extra):
+        return render(request, self.template_name, {
+            'captcha': captcha.public_config(),
+            'error':   None,
+            **_urls(request),
+            **extra,
+        }, status=status)
+
     def get(self, request):
         if _current_client(request):
             return redirect('partner-docs')
-        return render(request, self.template_name, {'error': None, **_urls(request)})
+        return self._render(request)
 
     def post(self, request):
         ip  = client_ip(request)
         key = f'partner-docs-login:{ip}'
         if cache.get(key, 0) >= LOGIN_ATTEMPTS:
-            return render(request, self.template_name, {
-                'error': "Urinishlar ko'p. 10 daqiqadan keyin qayta urinib ko'ring.",
-                **_urls(request),
-            }, status=429)
+            return self._render(request, 429, error="Urinishlar ko'p. 10 daqiqadan keyin qayta urinib ko'ring.")
 
         client_id = (request.POST.get('client_id') or '').strip()
-        secret    = request.POST.get('client_secret') or ''
-        client    = PartnerClient.objects.filter(client_id=client_id, is_active=True).first()
 
+        # CAPTCHA (yoqilgan bo'lsa) — parolni tekshirishdan oldin
+        if captcha.is_enabled():
+            field = captcha.public_config()['response_field']
+            ok, _code = captcha.verify(request.POST.get(field, ''), ip)
+            if not ok:
+                cache.set(key, cache.get(key, 0) + 1, LOGIN_WINDOW)
+                return self._render(request, 400, error="Tekshiruvdan o'tmadingiz. Qaytadan urinib ko'ring.",
+                                    client_id=client_id)
+
+        secret = request.POST.get('client_secret') or ''
+        client = PartnerClient.objects.filter(client_id=client_id, is_active=True).first()
         if not client or not client.check_secret(secret):
             cache.set(key, cache.get(key, 0) + 1, LOGIN_WINDOW)
-            return render(request, self.template_name, {
-                'error': "client_id yoki client_secret noto'g'ri.",
-                'client_id': client_id,
-                **_urls(request),
-            }, status=401)
+            return self._render(request, 401, error="login yoki parol noto'g'ri.", client_id=client_id)
 
         cache.delete(key)
         request.session.cycle_key()
@@ -121,38 +133,40 @@ class PartnerDocsView(View):
             request.session.flush()
             return redirect('partner-docs-login')
 
+        # Real javob namunalari — birinchi chop etilgan maqola
+        qs      = published_articles()
+        sample  = qs.first()
+        ctx_ser = {'request': request}
+        if sample is not None:
+            list_example = {
+                'count':    qs.count(),
+                'next':     None,
+                'previous': None,
+                'results':  [PartnerArticleListSerializer(sample, context=ctx_ser).data],
+            }
+            detail_example = PartnerArticleDetailSerializer(sample, context=ctx_ser).data
+            sample_id      = str(sample.pk)
+        else:
+            list_example   = {'count': 0, 'next': None, 'previous': None, 'results': []}
+            detail_example = None
+            sample_id      = '<id>'
+
         tokens = issue_pair(client)
+        urls   = _urls(request)
         return render(request, self.template_name, {
-            'client':       client,
-            'tokens':       tokens,
-            'schema_url':   reverse('partner-schema'),
-            'logout_url':   reverse('partner-docs-logout'),
-            'access_hours': round(settings.PARTNER_ACCESS_LIFETIME.total_seconds() / 3600, 1),
-            'refresh_days': settings.PARTNER_REFRESH_LIFETIME.days,
-            **_urls(request),
+            'client':         client,
+            'tokens':         tokens,
+            'logout_url':     reverse('partner-docs-logout'),
+            'access_hours':   round(settings.PARTNER_ACCESS_LIFETIME.total_seconds() / 3600, 1),
+            'refresh_days':   settings.PARTNER_REFRESH_LIFETIME.days,
+            'sample_id':      sample_id,
+            'detail_sample_url': f"{urls['api_base']}/api/partner/articles/{sample_id}/",
+            'list_example':   _pretty(list_example),
+            'detail_example': _pretty(detail_example) if detail_example else None,
+            'refresh_example': _pretty({
+                'token_type': 'Bearer', 'access': 'eyJ…', 'refresh': 'eyJ…',
+                'access_expires_in': int(settings.PARTNER_ACCESS_LIFETIME.total_seconds()),
+                'refresh_expires_in': int(settings.PARTNER_REFRESH_LIFETIME.total_seconds()),
+            }),
+            **urls,
         })
-
-
-# ── OpenAPI sxemasi — faqat /api/partner/ ────────────────────────────────────
-
-class PartnerDocsSession(BasePermission):
-    """Sxema faqat docs sahifasiga kirgan hamkorga beriladi."""
-    def has_permission(self, request, view):
-        return _current_client(request) is not None
-
-
-class PartnerSchemaView(SpectacularAPIView):
-    authentication_classes = []
-    permission_classes     = [PartnerDocsSession]
-    urlconf                = 'apps.partner.docs_urlconf'
-    custom_settings = {
-        'TITLE':       'Kutubxona.uz — Partner API',
-        'DESCRIPTION': (
-            "Tashqi xizmatlar uchun: chop etilgan maqolalar ro'yxati, bitta maqola "
-            "va uning fayli. Faqat GET. Har so'rovga `Authorization: Bearer <access>` "
-            "sarlavhasi kerak — bu sahifada u avtomatik qo'yilgan."
-        ),
-        'VERSION':            '1.0',
-        'SCHEMA_PATH_PREFIX': '/api/partner',
-    }
-    serve_include_schema = False

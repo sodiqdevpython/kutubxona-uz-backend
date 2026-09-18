@@ -98,14 +98,14 @@
     <button type="button" class="button" onclick="kbCopy('u2', this)">Nusxalash</button>
   </div>
   <div class="kb-row">
-    <label>Fayl (PDF)</label>
-    <input class="kb-url" id="u3" readonly value="{{ file_url }}">
+    <label>Yangilash</label>
+    <input class="kb-url" id="u3" readonly value="POST {{ refresh_url }}">
     <button type="button" class="button" onclick="kbCopy('u3', this)">Nusxalash</button>
   </div>
   <p class="kb-meta" style="margin:10px 0 0">
     Har so'rovga sarlavha: <code>Authorization: Bearer &lt;access&gt;</code>.
-    Ro'yxat: <code>?page=1&amp;page_size=50</code>, faqat yangilari: <code>?since=YYYY-MM-DD</code>.
-    Chegara: soatiga 1000 so'rov.
+    Maqola javobidagi <code>file_url</code> — faylning to'liq tayyor manzili.
+    Ro'yxat 50 tadan, keyingi sahifa <code>?page=2</code>. Chegara: soatiga 1000 so'rov.
   </p>
 </div>
 
@@ -137,11 +137,11 @@ HUJJAT VA SINOV (Swagger):
   login:  {{ client.client_id }}
   parol:  {% if new_secret %}{{ new_secret }}{% else %}<avval berilgan client_secret>{% endif %}
 
-ENDPOINTLAR (faqat GET):
-  Ro'yxat:   {{ list_url }}?page=1&page_size=50
-  Maqola:    {{ detail_url }}
-  Fayl:      {{ file_url }}
-  Sarlavha:  Authorization: Bearer <access>
+ENDPOINTLAR:
+  Ro'yxat:    GET  {{ list_url }}            (keyingi sahifa: ?page=2)
+  Maqola:     GET  {{ detail_url }}     (javobdagi file_url — faylning to'liq manzili)
+  Yangilash:  POST {{ refresh_url }}   {"refresh": "<refresh>"}
+  Sarlavha:   Authorization: Bearer <access>
 
 ACCESS TOKEN ({{ access_hours }} soat):
 {{ tokens.access }}

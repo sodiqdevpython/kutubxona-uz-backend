@@ -6,6 +6,7 @@ fayli beriladi. Abstrakt, tarkib, mualliflar, kalit so'zlar, ko'rishlar soni
 va boshqa ichki ma'lumotlar tashqariga CHIQMAYDI.
 """
 import os
+from urllib.parse import quote
 
 from rest_framework import serializers
 
@@ -34,59 +35,66 @@ class TokenPairSerializer(serializers.Serializer):
 
 # ── Maqolalar ────────────────────────────────────────────────────────────────
 
-class ArticleFileSerializer(serializers.Serializer):
-    name   = serializers.CharField(help_text='Fayl nomi')
-    format = serializers.CharField(help_text='pdf | docx | doc')
-    size   = serializers.IntegerField(help_text='Bayt')
-    url    = serializers.URLField(help_text='Yuklab olish manzili (token talab qiladi)')
+def _published(obj) -> str:
+    date = obj.published_at or obj.created_at.date()
+    return date.isoformat()
 
 
 class PartnerArticleListSerializer(serializers.ModelSerializer):
-    """Ro'yxat elementi — slug, sarlavha va sana."""
+    """Ro'yxat elementi — id, sarlavha va sana."""
     published_at = serializers.SerializerMethodField()
 
     class Meta:
         model  = Article
-        fields = ('slug', 'title', 'published_at')
+        fields = ('id', 'title', 'published_at')
 
-    def get_published_at(self, obj) -> str | None:
-        date = obj.published_at or obj.created_at.date()
-        return date.isoformat()
+    def get_published_at(self, obj) -> str:
+        return _published(obj)
 
 
 class PartnerArticleDetailSerializer(serializers.ModelSerializer):
-    """Detal — sarlavha va maqolaning haqiqiy fayli, boshqa hech narsa."""
+    """
+    Detal — sarlavha va maqolaning haqiqiy fayli, boshqa hech narsa.
+    `file_url` — to'liq, tayyor manzil (fayl nomi bilan); o'sha token bilan
+    to'g'ridan-to'g'ri yuklab olinadi.
+    """
     published_at = serializers.SerializerMethodField()
-    file         = serializers.SerializerMethodField()
+    file_url     = serializers.SerializerMethodField()
+    file_name    = serializers.SerializerMethodField()
+    file_format  = serializers.SerializerMethodField()
+    file_size    = serializers.SerializerMethodField()
 
     class Meta:
         model  = Article
-        fields = ('slug', 'title', 'published_at', 'file')
+        fields = ('id', 'title', 'published_at', 'file_url', 'file_name', 'file_format', 'file_size')
 
-    def get_published_at(self, obj) -> str | None:
-        date = obj.published_at or obj.created_at.date()
-        return date.isoformat()
+    def get_published_at(self, obj) -> str:
+        return _published(obj)
 
-    def get_file(self, obj) -> dict | None:
-        f = obj.source_file
-        if not f:
+    def _name(self, obj) -> str:
+        return os.path.basename(obj.source_file.name) if obj.source_file else ''
+
+    def get_file_name(self, obj) -> str | None:
+        return self._name(obj) or None
+
+    def get_file_format(self, obj) -> str | None:
+        name = self._name(obj)
+        if not name:
             return None
+        return os.path.splitext(name)[1].lstrip('.').lower() or 'bin'
 
-        name = os.path.basename(f.name)
-        ext  = os.path.splitext(name)[1].lstrip('.').lower()
-
+    def get_file_size(self, obj) -> int | None:
+        if not obj.source_file:
+            return None
         try:
-            size = f.size
+            return obj.source_file.size
         except (OSError, ValueError):
-            size = 0
+            return 0
 
+    def get_file_url(self, obj) -> str | None:
+        name = self._name(obj)
+        if not name:
+            return None
+        rel_path = f'/api/partner/articles/{obj.pk}/file/{quote(name)}'
         request  = self.context.get('request')
-        rel_path = f'/api/partner/articles/{obj.slug}/file/'
-        url      = request.build_absolute_uri(rel_path) if request else rel_path
-
-        return {
-            'name':   name,
-            'format': ext or 'bin',
-            'size':   size,
-            'url':    url,
-        }
+        return request.build_absolute_uri(rel_path) if request else rel_path
