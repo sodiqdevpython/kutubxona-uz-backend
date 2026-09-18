@@ -276,7 +276,7 @@ SPECTACULAR_SETTINGS = {
     'SERVE_INCLUDE_SCHEMA': False,
     'TAGS': [
         {'name': 'Partner API',
-         'description': "Tashqi xizmatlar uchun: chop etilgan maqolalar ro'yxati va fayllari."},
+         'description': "."},
     ],
     # Har bir chaqiruvda takrorlanadigan "unable to guess serializer" xabarlari
     # ProjectAutoSchema orqali bostirilgan (utils/schema.py).

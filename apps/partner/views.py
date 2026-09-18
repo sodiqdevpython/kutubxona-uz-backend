@@ -56,8 +56,8 @@ class IsPartner(BasePermission):
 
 
 class PartnerPagination(PageNumberPagination):
-    """50 tadan, faqat `?page=N` — boshqa parametr yo'q (hamkor uchun sodda)."""
-    page_size = 50
+    """20 tadan, faqat `?page=N` — boshqa parametr yo'q (hamkor uchun sodda)."""
+    page_size = 20
 
     def get_paginated_response(self, data):
         return Response({
@@ -192,7 +192,7 @@ class PartnerTokenRefreshView(APIView):
     tags=['Partner API'],
     summary='Maqolalar ro\'yxati',
     description=(
-        'Chop etilgan va fayli mavjud maqolalar — eng yangisidan eskisiga, 50 tadan.\n\n'
+        'Chop etilgan va fayli mavjud maqolalar — eng yangisidan eskisiga, 20 tadan.\n\n'
         'Har bir element: `id`, `title`, `published_at`. Boshqa ma\'lumot berilmaydi.\n'
         'Faylni olish uchun `id` bo\'yicha detal endpointiga murojaat qiling.'
     ),

@@ -16,7 +16,8 @@
   .who { color:var(--ink-2); font-size:13px; }
   .top form { margin-left:auto; }
   .top button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:7px 12px; font:inherit; cursor:pointer; }
-  .wrap { max-width:1120px; margin:0 auto; padding:22px 24px; }
+  .wrap { max-width:1700px; margin:0 auto; padding:22px 28px; }
+  .swagger-ui .wrapper { max-width:100%; padding:0 24px; }
   .tokens { background:#fffaf4; border:1px solid #f0c9a0; border-radius:12px; padding:16px 18px; }
   .row { display:flex; gap:8px; align-items:center; margin:6px 0; }
   .row label { width:64px; color:var(--ink-3); font-size:12px; flex-shrink:0; }
@@ -41,12 +42,8 @@
 <div class="wrap">
   <!-- Tokenlar -->
   <div class="tokens">
-    <div class="row"><label>access</label><textarea id="acc" rows="2" readonly>{{ tokens.access }}</textarea><button class="cp" onclick="cp('acc',this)">Nusxa</button></div>
-    <div class="row"><label>refresh</label><textarea id="ref" rows="2" readonly>{{ tokens.refresh }}</textarea><button class="cp" onclick="cp('ref',this)">Nusxa</button></div>
-    <p class="meta">
-      Har so'rovga <code>Authorization: Bearer &lt;access&gt;</code>. access {{ access_hours }} soat, refresh {{ refresh_days }} kun.
-      Pastdagi «Try it out» avtomatik shu access bilan yuboriladi. Sahifani yangilasangiz — yangi juftlik.
-    </p>
+    <div class="row"><label>access</label><textarea id="acc" rows="2" readonly>{{ tokens.access }}</textarea><button class="cp" onclick="cp('acc',this)">Copy</button></div>
+    <div class="row"><label>refresh</label><textarea id="ref" rows="2" readonly>{{ tokens.refresh }}</textarea><button class="cp" onclick="cp('ref',this)">Copy</button></div>
   </div>
 
   <!-- drf-spectacular Swagger UI — faqat 3 ta hamkor endpointi -->

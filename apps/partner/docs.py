@@ -156,9 +156,7 @@ class PartnerSchemaView(SpectacularAPIView):
     custom_settings = {
         'TITLE':       'Kutubxona.uz — Partner API',
         'DESCRIPTION': (
-            "Chop etilgan maqolalar ro'yxati, bitta maqola (fayl manzili bilan) va "
-            "access tokenni yangilash. Har so'rovga `Authorization: Bearer <access>` "
-            "kerak — bu sahifada u avtomatik qo'yilgan."
+            ""
         ),
         'VERSION':             '1.0',
         'SCHEMA_PATH_PREFIX':  '/api/partner',
