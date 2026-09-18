@@ -7,7 +7,6 @@
   &rsaquo; <a href="{% url 'admin:app_list' app_label='partner' %}">Hamkor API</a>
   &rsaquo; <a href="{% url 'admin:partner_partnerclient_changelist' %}">Hamkor mijozlar (API)</a>
   &rsaquo; {{ client.name }}
-  &rsaquo; Tokenlar
 </div>
 {% endblock %}
 
@@ -30,10 +29,11 @@
   .kb-warn      { background:#fff8e1; border:1px solid #ffe082; border-radius:6px;
                   padding:12px 14px; font-size:13px; margin-bottom:18px; }
   .kb-head      { display:flex; justify-content:space-between; align-items:baseline; gap:20px; flex-wrap:wrap; }
+  details.kb-card summary { cursor:pointer; font-size:15px; font-weight:600; }
 </style>
 
 <div class="kb-head">
-  <h1 style="margin:0 0 14px">{{ client.name }} — hamkorga beriladigan 3 ta narsa</h1>
+  <h1 style="margin:0 0 14px">{{ client.name }} — hamkorga beriladigan ma'lumotlar</h1>
   <span class="kb-meta">
     {% if client.is_active %}✅ Faol{% else %}⛔ O'chirilgan{% endif %}
     · so'rovlar: {{ client.request_count }}
@@ -41,16 +41,13 @@
   </span>
 </div>
 
-{% if tokens %}
+{% if not client.is_active %}
+<div class="kb-warn">Mijoz o'chirilgan — «Faol» belgisini yoqing, keyin hamkor kira oladi.</div>
+{% endif %}
 
-<div class="kb-warn">
-  Quyidagilarni nusxalab hamkorga yuboring. Sahifa har ochilganda <strong>yangi</strong>
-  token juftligi beriladi; oldin berilganlari muddati tugaguncha ishlayveradi.
-</div>
-
-<!-- 0 · Hujjat sahifasi — login/parol -->
+<!-- Hujjat sahifasi — login/parol -->
 <div class="kb-card" style="border-color:#f0a050">
-  <h2><span class="kb-num" style="background:#F08418">★</span> Hamkor hujjati (Swagger) — login / parol</h2>
+  <h2><span class="kb-num" style="background:#F08418">★</span> Hujjat sahifasi (Swagger) — login / parol</h2>
   <div class="kb-row">
     <label>Sahifa</label>
     <input class="kb-url" id="u0" readonly value="{{ docs_url }}">
@@ -68,7 +65,7 @@
       <button type="button" class="button" onclick="kbCopy('sec', this)">Nusxalash</button>
     {% else %}
       <span class="kb-meta" style="flex:1">avval berilgan (qayta ko'rsatilmaydi)</span>
-      <form method="post" style="margin:0" onsubmit="return confirm('Yangi parol beriladi — eski client_secret ishlamay qoladi. Davom etilsinmi?')">
+      <form method="post" style="margin:0" onsubmit="return confirm('Yangi parol beriladi, eski client_secret ishlamay qoladi. Davom etilsinmi?')">
         {% csrf_token %}
         <input type="hidden" name="action" value="rotate">
         <button type="submit" class="button">Yangi parol berish</button>
@@ -79,22 +76,22 @@
   <p class="kb-meta" style="margin:8px 0 0; color:#b3261e"><strong>Parol faqat hozir ko'rinadi</strong> — nusxalab oling.</p>
   {% endif %}
   <p class="kb-meta" style="margin:10px 0 0">
-    Hamkor shu login/parol bilan sahifaga kiradi: faqat o'z endpointlari hujjati, tayyor
-    access/refresh va «Try it out». Tokenlari tugasa — o'zi qayta kirib oladi, sizga yozmaydi.
+    Hamkor shu login/parol bilan kiradi: tepada o'ziga tegishli access/refresh (har kirishda yangisi),
+    pastda Swagger — «Try it out» avtomatik token bilan ishlaydi. Tokenlari tugasa o'zi qayta kirib oladi.
   </p>
 </div>
 
-<!-- 1 · Endpointlar -->
+<!-- Endpointlar -->
 <div class="kb-card">
-  <h2><span class="kb-num">1</span> Endpoint manzillari (faqat GET)</h2>
+  <h2><span class="kb-num">1</span> Endpointlar</h2>
   <div class="kb-row">
     <label>Ro'yxat</label>
-    <input class="kb-url" id="u1" readonly value="{{ list_url }}">
+    <input class="kb-url" id="u1" readonly value="GET {{ list_url }}">
     <button type="button" class="button" onclick="kbCopy('u1', this)">Nusxalash</button>
   </div>
   <div class="kb-row">
     <label>Maqola</label>
-    <input class="kb-url" id="u2" readonly value="{{ detail_url }}">
+    <input class="kb-url" id="u2" readonly value="GET {{ detail_url }}">
     <button type="button" class="button" onclick="kbCopy('u2', this)">Nusxalash</button>
   </div>
   <div class="kb-row">
@@ -104,66 +101,50 @@
   </div>
   <p class="kb-meta" style="margin:10px 0 0">
     Har so'rovga sarlavha: <code>Authorization: Bearer &lt;access&gt;</code>.
-    Maqola javobidagi <code>file_url</code> — faylning to'liq tayyor manzili.
-    Ro'yxat 20 tadan, keyingi sahifa <code>?page=2</code>. Chegara: soatiga 1000 so'rov.
+    Ro'yxat 20 tadan (<code>?page=2</code>); maqola javobidagi <code>file_url</code> — faylning to'liq tayyor manzili.
+    Chegara: soatiga 1000 so'rov.
   </p>
 </div>
 
-<!-- 2 · Access -->
-<div class="kb-card">
-  <h2><span class="kb-num">2</span> Access token <span class="kb-meta">— {{ access_hours }} soat amal qiladi</span></h2>
-  <textarea class="kb-token" id="acc" rows="4" readonly>{{ tokens.access }}</textarea>
-  <button type="button" class="button kb-copy" onclick="kbCopy('acc', this)">Nusxalash</button>
-</div>
-
-<!-- 3 · Refresh -->
-<div class="kb-card">
-  <h2><span class="kb-num">3</span> Refresh token <span class="kb-meta">— {{ refresh_days }} kun; access tugaganda yangisini beradi</span></h2>
-  <textarea class="kb-token" id="ref" rows="4" readonly>{{ tokens.refresh }}</textarea>
-  <button type="button" class="button kb-copy" onclick="kbCopy('ref', this)">Nusxalash</button>
-  <p class="kb-meta" style="margin:10px 0 0">
-    <code>POST {{ refresh_url }}</code> &nbsp; body: <code>{"refresh": "&lt;refresh&gt;"}</code>
-    → yangi access + refresh qaytadi (eski refresh ham o'z muddatigacha ishlaydi).
-  </p>
-</div>
-
-<!-- Hammasi birga -->
+<!-- Hamkorga yuboriladigan matn — tokensiz, eskirmaydi -->
 <div class="kb-card" style="border-color:#0f172a">
-  <h2>Hammasi birga — hamkorga yuborish uchun</h2>
-  <textarea class="kb-token" id="all" rows="20" readonly>Kutubxona.uz — Partner API
+  <h2><span class="kb-num">2</span> Hamkorga yuboriladigan matn</h2>
+  <textarea class="kb-token" id="all" rows="14" readonly>Kutubxona.uz — Partner API
 
-HUJJAT VA SINOV (Swagger):
+HUJJAT VA TOKENLAR (Swagger):
   {{ docs_url }}
   login:  {{ client.client_id }}
   parol:  {% if new_secret %}{{ new_secret }}{% else %}<avval berilgan client_secret>{% endif %}
+  Kirgach sahifada access (1 soat) va refresh (30 kun) tokenlar turadi.
 
-ENDPOINTLAR:
-  Ro'yxat:    GET  {{ list_url }}            (keyingi sahifa: ?page=2)
+ENDPOINTLAR (sarlavha: Authorization: Bearer <access>):
+  Ro'yxat:    GET  {{ list_url }}            (20 tadan, keyingi sahifa: ?page=2)
   Maqola:     GET  {{ detail_url }}     (javobdagi file_url — faylning to'liq manzili)
-  Yangilash:  POST {{ refresh_url }}   {"refresh": "<refresh>"}
-  Sarlavha:   Authorization: Bearer <access>
-
-ACCESS TOKEN ({{ access_hours }} soat):
-{{ tokens.access }}
-
-REFRESH TOKEN ({{ refresh_days }} kun):
-{{ tokens.refresh }}
-
-Access tugaganda yangilash:
-  POST {{ refresh_url }}
-  {"refresh": "<refresh>"}   →  {"access": "...", "refresh": "..."}</textarea>
-  <button type="button" class="button kb-copy default" onclick="kbCopy('all', this)">Hammasini nusxalash</button>
+  Yangilash:  POST {{ refresh_url }}   {"refresh": "<refresh>"}  →  yangi access + refresh</textarea>
+  <button type="button" class="button kb-copy default" onclick="kbCopy('all', this)">Matnni nusxalash</button>
+  <p class="kb-meta" style="margin:8px 0 0">Bu matnda eskiradigan narsa yo'q — tokenlarni hamkor hujjat sahifasidan o'zi oladi.</p>
 </div>
 
+{% if tokens %}
+<!-- Tayyor tokenlar — ixtiyoriy -->
+<details class="kb-card">
+  <summary>Tayyor tokenlar (ixtiyoriy) — access {{ access_hours }} soat, refresh {{ refresh_days }} kun</summary>
+  <p class="kb-meta" style="margin:10px 0 6px">
+    Hamkor hujjat sahifasiga kira olmasa, shu tokenlarni berish mumkin. Sahifa har ochilganda yangi juftlik;
+    access {{ access_hours }} soatda eskiradi — shuning uchun yuqoridagi matnga kiritilmagan.
+  </p>
+  <label class="kb-meta" for="acc">access</label>
+  <textarea class="kb-token" id="acc" rows="3" readonly>{{ tokens.access }}</textarea>
+  <button type="button" class="button kb-copy" onclick="kbCopy('acc', this)">Nusxalash</button>
+  <label class="kb-meta" for="ref" style="display:block; margin-top:10px">refresh</label>
+  <textarea class="kb-token" id="ref" rows="3" readonly>{{ tokens.refresh }}</textarea>
+  <button type="button" class="button kb-copy" onclick="kbCopy('ref', this)">Nusxalash</button>
+</details>
 {% endif %}
 
-<div class="kb-card">
-  <form method="post" style="display:inline">
-    {% csrf_token %}
-    <button type="submit" class="button"{% if not client.is_active %} disabled{% endif %}>Yangi tokenlar berish</button>
-  </form>
-  <form method="post" style="display:inline; margin-left:10px"
-        onsubmit="return confirm('Barcha tokenlar bekor qilinsinmi? Hamkorning integratsiyasi to‘xtaydi.')">
+<div class="kb-card" style="border-color:#f3c6c2">
+  <form method="post" style="display:inline"
+        onsubmit="return confirm('Barcha tokenlar bekor qilinsinmi? Hamkor qayta kirib yangi token olishi kerak bo`ladi.')">
     {% csrf_token %}
     <input type="hidden" name="action" value="revoke">
     <button type="submit" style="background:#b3261e; color:#fff; border:0;
@@ -171,10 +152,10 @@ Access tugaganda yangilash:
       Barcha tokenlarni bekor qilish
     </button>
   </form>
-  <p class="kb-meta" style="margin:12px 0 0">
-    «Bekor qilish» — shu paytgacha berilgan <strong>barcha</strong> access va refresh tokenlar
-    bir zumda yaroqsiz bo'ladi; keyin yana yangisini berish mumkin.
-  </p>
+  <span class="kb-meta" style="margin-left:12px">
+    Berilgan <strong>barcha</strong> access/refresh tokenlar va hamkorning hujjat sahifasidagi sessiyasi bir zumda tugaydi;
+    login/parol o'zgarmaydi — hamkor qayta kirib yangi token oladi.
+  </span>
 </div>
 
 <p>
