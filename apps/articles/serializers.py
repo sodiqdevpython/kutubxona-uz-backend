@@ -47,7 +47,7 @@ class ArticleListSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'title', 'slug', 'excerpt',
             'category', 'authors', 'author_label', 'author_names',
-            'year', 'quarter',
+            'year', 'quarter', 'page_start', 'page_end',
             'pages', 'min_read', 'cites', 'views',
             'img_variant', 'image_url', 'keywords', 'published_at',
         )
@@ -136,6 +136,28 @@ class ArticleDetailSerializer(ArticleListSerializer):
             'journal_id':      str(i.journal_id) if i.journal_id else None,
             'journal_title':   i.journal.title if i.journal_id else None,
         }
+
+
+class ArticleTocSerializer(serializers.ModelSerializer):
+    """Son mundarijasi uchun qisqa ko'rinish (Figma: «Jurnal arxiv detail»)."""
+    authors   = serializers.SerializerMethodField()
+    image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = Article
+        fields = ('id', 'title', 'slug', 'authors', 'page_start', 'page_end', 'views', 'image_url')
+
+    @extend_schema_field({'type': 'array', 'items': {'type': 'string'}})
+    def get_authors(self, obj):
+        names = [a.name for a in obj.authors.all()]
+        return names or obj.author_names_list
+
+    @extend_schema_field({'type': 'string', 'nullable': True})
+    def get_image_url(self, obj) -> str | None:
+        if not obj.image:
+            return None
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.image.url) if request else obj.image.url
 
 
 # ── Submission ────────────────────────────────────────────────────────────────

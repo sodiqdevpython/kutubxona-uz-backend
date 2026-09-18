@@ -34,6 +34,12 @@ class Author(BaseModel):
         default=0, verbose_name="Profil ko'rilishi soni"
     )
 
+    # ── Identifikatorlar (Figma: «Aloqa va identifikatorlar» kartasi) ──────
+    orcid     = models.CharField(max_length=19, blank=True, verbose_name='ORCID',
+                                 help_text="0000-0002-1825-0097 ko'rinishida")
+    email     = models.EmailField(blank=True, verbose_name='Elektron pochta')
+    scopus_id = models.CharField(max_length=30, blank=True, verbose_name='Scopus Author ID')
+
     # ── Telegram ──────────────────────────────────────────────────────────────
     telegram_chat_id = models.BigIntegerField(
         null=True, blank=True, unique=True, db_index=True,

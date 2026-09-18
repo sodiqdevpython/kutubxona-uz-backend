@@ -16,9 +16,27 @@ class JournalAdmin(admin.ModelAdmin):
 
 @admin.register(Issue)
 class IssueAdmin(admin.ModelAdmin):
-    list_display  = ('__str__', 'year', 'season', 'has_pdf', 'is_current', 'is_upcoming', 'article_count')
+    list_display  = ('__str__', 'year', 'season', 'has_pdf', 'total_pages', 'views',
+                     'is_current', 'is_upcoming', 'article_count')
     list_filter   = ('year', 'season', 'is_current', 'is_upcoming')
     list_editable = ('is_current', 'is_upcoming')
+    readonly_fields = ('views',)
+
+    fieldsets = (
+        ('Asosiy', {
+            'fields': ('journal', 'volume', 'number', 'year', 'season', 'date_label', 'palette'),
+        }),
+        ('Fayllar', {
+            'fields': ('cover_image', 'pdf_file'),
+        }),
+        ('Son sahifasi', {
+            'fields': ('editorial_note', 'editor_name', 'total_pages'),
+            'description': "Bu maydonlar saytdagi son sahifasida muqova yonida chiqadi.",
+        }),
+        ('Holat', {
+            'fields': ('is_current', 'is_upcoming', 'views'),
+        }),
+    )
 
     @admin.display(description='PDF', boolean=True)
     def has_pdf(self, obj):

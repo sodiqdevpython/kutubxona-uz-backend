@@ -36,6 +36,20 @@ class Issue(BaseModel):
         verbose_name='Muqova rasmi (ixtiyoriy)',
         help_text='Yuklanmasa, palette ranglari asosida default cover ko\'rsatiladi.'
     )
+    # ── Son sahifasi uchun (Figma: «Jurnal arxiv detail») ──────────────────
+    editorial_note = models.TextField(
+        blank=True, verbose_name="Tahririyat so'zi",
+        help_text="Son sahifasida muqova yonida chiqadigan kirish matni.",
+    )
+    editor_name = models.CharField(
+        max_length=200, blank=True, verbose_name='Bosh muharrir',
+        help_text="Masalan: f.f.d. N. Qodirova",
+    )
+    total_pages = models.PositiveIntegerField(
+        default=0, verbose_name='Hajmi (bet)',
+    )
+    views = models.PositiveIntegerField(default=0, verbose_name="Ko'rishlar")
+
     pdf_file = models.FileField(
         upload_to='journals/pdfs/%Y/', null=True, blank=True,
         validators=[validate_document],

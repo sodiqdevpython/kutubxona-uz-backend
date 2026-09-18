@@ -1,11 +1,14 @@
+from django.core.cache import cache
+from django.db.models import F
 from rest_framework import viewsets, mixins
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import Journal, Issue
-from .serializers import JournalSerializer, IssueSerializer
+from .serializers import JournalSerializer, IssueSerializer, IssueDetailSerializer
 from utils.cache import CachedListMixin, cached_action, NS_CATALOG
+from utils.request_ip import client_ip
 
 
 class JournalViewSet(CachedListMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
@@ -20,6 +23,23 @@ class IssueViewSet(CachedListMixin, viewsets.ReadOnlyModelViewSet):
     filter_backends  = [DjangoFilterBackend]
     filterset_fields = ['year', 'season', 'is_current', 'is_upcoming']
     pagination_class = None
+
+    def get_serializer_class(self):
+        if self.action == 'retrieve':
+            return IssueDetailSerializer
+        return IssueSerializer
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self._unique_view(request, instance)
+        return Response(self.get_serializer(instance, context={'request': request}).data)
+
+    @staticmethod
+    def _unique_view(request, issue):
+        """Bir IP + son uchun 24 soatda bir marta hisoblanadi."""
+        key = f'iview:{issue.pk}:{client_ip(request)}'
+        if cache.add(key, 1, timeout=86400):
+            Issue.objects.filter(pk=issue.pk).update(views=F('views') + 1)
 
     @action(detail=False, url_path='archive')
     @cached_action(namespace=NS_CATALOG)
