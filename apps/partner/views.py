@@ -144,7 +144,7 @@ class PartnerTokenView(APIView):
 @extend_schema(
     tags=['Partner API'],
     summary='Tokenni yangilash',
-    description='Refresh token yordamida yangi access + refresh juftligi olinadi.',
+    description='Refresh token yordamida yangi access + refresh olinadi.',
     request=TokenRefreshRequestSerializer,
     responses={
         200: TokenPairSerializer,
@@ -192,9 +192,7 @@ class PartnerTokenRefreshView(APIView):
     tags=['Partner API'],
     summary='Maqolalar ro\'yxati',
     description=(
-        'Chop etilgan va fayli mavjud maqolalar — eng yangisidan eskisiga, 20 tadan.\n\n'
-        'Har bir element: `id`, `title`, `published_at`. Boshqa ma\'lumot berilmaydi.\n'
-        'Faylni olish uchun `id` bo\'yicha detal endpointiga murojaat qiling.'
+        'Maqolalar ro\'yxati\n\n'
     ),
     parameters=[OpenApiParameter('page', int, description='Sahifa raqami')],
     responses={200: PartnerArticleListSerializer(many=True)},
