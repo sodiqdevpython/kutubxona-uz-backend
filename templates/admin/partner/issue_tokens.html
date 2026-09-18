@@ -1,0 +1,159 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label='partner' %}">Hamkor API</a>
+  &rsaquo; <a href="{% url 'admin:partner_partnerclient_changelist' %}">Hamkor mijozlar (API)</a>
+  &rsaquo; {{ client.name }}
+  &rsaquo; Tokenlar
+</div>
+{% endblock %}
+
+{% block content %}
+<style>
+  .kb-card      { background:#fff; border:1px solid #e0e0e0; border-radius:8px;
+                  padding:18px 20px; margin-bottom:18px; }
+  .kb-card h2   { margin:0 0 10px; font-size:15px; }
+  .kb-token     { display:block; width:100%; box-sizing:border-box; font-family:monospace;
+                  font-size:12px; padding:10px; border:1px solid #d0d0d0; border-radius:6px;
+                  background:#fafafa; word-break:break-all; resize:vertical; }
+  .kb-label     { font-weight:600; font-size:12px; color:#444; margin:14px 0 5px; display:block; }
+  .kb-meta      { font-size:12px; color:#666; }
+  .kb-copy      { margin-top:6px; }
+  .kb-warn      { background:#fff8e1; border:1px solid #ffe082; border-radius:6px;
+                  padding:12px 14px; font-size:13px; margin-bottom:18px; }
+  .kb-pre       { background:#0f172a; color:#e2e8f0; padding:14px; border-radius:6px;
+                  font-size:12px; overflow-x:auto; line-height:1.5; }
+  .kb-pre .k    { color:#7dd3fc; }
+  table.kb-t    { width:100%; border-collapse:collapse; font-size:13px; }
+  table.kb-t td { padding:6px 0; border-bottom:1px solid #f0f0f0; }
+  table.kb-t td:first-child { color:#666; width:190px; }
+</style>
+
+<h1>{{ client.name }} — API tokenlari</h1>
+
+<div class="kb-card">
+  <h2>Mijoz</h2>
+  <table class="kb-t">
+    <tr><td>Nomi</td><td>{{ client.name }}</td></tr>
+    <tr><td>client_id</td><td><code>{{ client.client_id }}</code></td></tr>
+    <tr><td>Holati</td><td>{% if client.is_active %}✅ Faol{% else %}⛔ O'chirilgan{% endif %}</td></tr>
+    <tr><td>Aloqa</td><td>{{ client.contact|default:"—" }}</td></tr>
+    <tr><td>So'rovlar soni</td><td>{{ client.request_count }}</td></tr>
+    <tr><td>Oxirgi murojaat</td><td>{{ client.last_used_at|default:"—" }}</td></tr>
+    <tr><td>API manzili</td><td><code>{{ api_base }}</code></td></tr>
+    <tr><td>Token versiyasi</td><td>{{ client.token_version }}</td></tr>
+  </table>
+</div>
+
+{% if tokens %}
+<div class="kb-warn">
+  <strong>Bu tokenlarni hoziroq nusxalab oling.</strong> Sahifa yangilanganda ular
+  qaytadan ko'rsatilmaydi (yangisini generatsiya qilish mumkin, eskisi baribir amal qiladi).
+</div>
+
+<div class="kb-card">
+  <h2>Hamkorga beriladigan tokenlar</h2>
+
+  <label class="kb-label" for="acc">Access token — {{ tokens.access_expires_in }} soniya (≈1 soat)</label>
+  <textarea class="kb-token" id="acc" rows="4" readonly>{{ tokens.access }}</textarea>
+  <button type="button" class="button kb-copy" onclick="kbCopy('acc', this)">Nusxalash</button>
+
+  <label class="kb-label" for="ref">Refresh token — {{ tokens.refresh_expires_in }} soniya (≈30 kun)</label>
+  <textarea class="kb-token" id="ref" rows="4" readonly>{{ tokens.refresh }}</textarea>
+  <button type="button" class="button kb-copy" onclick="kbCopy('ref', this)">Nusxalash</button>
+
+  <label class="kb-label" for="all">Hammasi birga (hamkorga yuborish uchun)</label>
+  <textarea class="kb-token" id="all" rows="9" readonly>Kutubxona.uz — Partner API
+Base URL: {{ api_base }}
+Hujjat:   {{ api_base }}/api/partner/
+
+client_id: {{ client.client_id }}
+
+access:  {{ tokens.access }}
+refresh: {{ tokens.refresh }}
+
+Access token ~1 soat amal qiladi. Muddati tugasa:
+POST {{ api_base }}/api/partner/auth/refresh/  {"refresh": "&lt;refresh&gt;"}</textarea>
+  <button type="button" class="button kb-copy" onclick="kbCopy('all', this)">Nusxalash</button>
+</div>
+{% endif %}
+
+<div class="kb-card">
+  <h2>Yangi token juftligi berish</h2>
+  <p class="kb-meta">
+    Hamkor <code>client_id</code> + <code>client_secret</code> bilan tokenni o'zi ham
+    ola oladi. Bu tugma — secret ulashmasdan, tayyor tokenni berish uchun.
+    Eski tokenlar bekor qilinmaydi; ular muddati tugaguncha ishlaydi.
+  </p>
+  <form method="post" style="margin-top:12px">
+    {% csrf_token %}
+    <button type="submit" class="default"{% if not client.is_active %} disabled{% endif %}>
+      Yangi access + refresh generatsiya qilish
+    </button>
+    {% if not client.is_active %}
+      <span class="kb-meta" style="margin-left:10px">Mijoz o'chirilgan — avval faollashtiring.</span>
+    {% endif %}
+  </form>
+</div>
+
+<div class="kb-card" style="border-color:#f3c6c2">
+  <h2>Tokenlarni bekor qilish</h2>
+  <p class="kb-meta">
+    Token o'g'irlangan yoki hamkor bilan hamkorlik tugagan bo'lsa — shu tugma
+    <strong>berilgan barcha access va refresh tokenlarni</strong> bir zumda
+    yaroqsiz qiladi. Mijoz o'chirilmaydi: keyin yangi token berish mumkin.
+    <code>client_id</code> va <code>client_secret</code> o'zgarmaydi —
+    ular ham almashishi kerak bo'lsa, «Yangi client_secret generatsiya qilish»
+    amalidan foydalaning.
+  </p>
+  <form method="post" style="margin-top:12px"
+        onsubmit="return confirm('Barcha tokenlar bekor qilinsinmi? Hamkorning integratsiyasi to‘xtaydi.')">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="revoke">
+    <button type="submit" style="background:#b3261e; color:#fff; border:0;
+            padding:8px 14px; border-radius:4px; cursor:pointer">
+      Barcha tokenlarni bekor qilish
+    </button>
+  </form>
+</div>
+
+<div class="kb-card">
+  <h2>Hamkor nima qila oladi</h2>
+  <p class="kb-meta" style="margin-bottom:10px">
+    Faqat <strong>GET</strong>. Faqat saytda chop etilgan (jurnal soniga kiritilgan)
+    va fayli mavjud maqolalar. Soatiga 1000 ta so'rov.
+  </p>
+  <pre class="kb-pre"># 1) Maqolalar ro'yxati (yangidan eskiga)
+curl -H "Authorization: Bearer &lt;access&gt;" \
+     "{{ api_base }}/api/partner/articles/?page_size=50"
+
+# 2) Bitta maqola
+curl -H "Authorization: Bearer &lt;access&gt;" \
+     "{{ api_base }}/api/partner/articles/&lt;slug&gt;/"
+
+# 3) Maqola fayli (PDF / DOCX)
+curl -H "Authorization: Bearer &lt;access&gt;" -OJ \
+     "{{ api_base }}/api/partner/articles/&lt;slug&gt;/file/"</pre>
+</div>
+
+<p><a href="{% url 'admin:partner_partnerclient_changelist' %}">&larr; Mijozlar ro'yxatiga qaytish</a></p>
+
+<script>
+function kbCopy(id, btn) {
+  var el = document.getElementById(id);
+  el.select();
+  el.setSelectionRange(0, 999999);
+  try {
+    navigator.clipboard.writeText(el.value);
+  } catch (e) {
+    document.execCommand('copy');
+  }
+  var old = btn.textContent;
+  btn.textContent = 'Nusxalandi ✓';
+  setTimeout(function () { btn.textContent = old; }, 1500);
+}
+</script>
+{% endblock %}

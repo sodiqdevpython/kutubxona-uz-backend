@@ -9,22 +9,22 @@ class IssueSerializer(serializers.ModelSerializer):
     journal_id      = serializers.SerializerMethodField()
     journal_title   = serializers.SerializerMethodField()
 
-    def get_cover_image_url(self, obj):
+    def get_cover_image_url(self, obj) -> str | None:
         if not obj.cover_image:
             return None
         request = self.context.get('request')
         return request.build_absolute_uri(obj.cover_image.url) if request else obj.cover_image.url
 
-    def get_pdf_file_url(self, obj):
+    def get_pdf_file_url(self, obj) -> str | None:
         if not obj.pdf_file:
             return None
         request = self.context.get('request')
         return request.build_absolute_uri(obj.pdf_file.url) if request else obj.pdf_file.url
 
-    def get_journal_id(self, obj):
+    def get_journal_id(self, obj) -> str | None:
         return str(obj.journal_id) if obj.journal_id else None
 
-    def get_journal_title(self, obj):
+    def get_journal_title(self, obj) -> str | None:
         return obj.journal.title if obj.journal_id else None
 
     class Meta:

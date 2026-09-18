@@ -172,7 +172,7 @@ ARTICLES = [
         category="Arxiv ishi",
         authors=["DR", "AY"],
         year=2026, quarter=1, pages=24, min_read=14,
-        cites=24,  views=8, img_variant=0, status="open",
+        cites=24,  views=8, img_variant=0,
         issue=(42, 1), published_at=date(2026, 3, 15),
     ),
     dict(
@@ -185,7 +185,7 @@ ARTICLES = [
         category="Nodir nashrlar",
         authors=["NS"],
         year=2026, quarter=1, pages=32, min_read=22,
-        cites=48,  views=6, img_variant=1, status="open",
+        cites=48,  views=6, img_variant=1,
         issue=(42, 1), published_at=date(2026, 3, 18),
     ),
     dict(
@@ -198,7 +198,7 @@ ARTICLES = [
         category="Katalogizatsiya",
         authors=["AY", "GK"],
         year=2026, quarter=1, pages=18, min_read=18,
-        cites=12,  views=4,    img_variant=2, status="open",
+        cites=12,  views=4,    img_variant=2,
         issue=(42, 1), published_at=date(2026, 3, 22),
     ),
     dict(
@@ -211,7 +211,7 @@ ARTICLES = [
         category="Bibliografiya",
         authors=["GK"],
         year=2025, quarter=4, pages=48, min_read=26,
-        cites=34,  views=3,    img_variant=3, status="lock",
+        cites=34,  views=3,    img_variant=3,
         issue=(41, 4), published_at=date(2025, 12, 10),
     ),
     # ── Quyidagi ikki maqola journal da yo'q — Topshirishlar sahifasida
@@ -226,7 +226,7 @@ ARTICLES = [
         category="Raqamlashtirish",
         authors=["MI", "DR"],
         year=2026, quarter=2, pages=12, min_read=12,
-        cites=5,   views=2,    img_variant=0, status="open",
+        cites=5,   views=2,    img_variant=0,
         issue=None, published_at=None,
     ),
     dict(
@@ -239,7 +239,7 @@ ARTICLES = [
         category="Konservatsiya",
         authors=["BT"],
         year=2026, quarter=2, pages=14, min_read=16,
-        cites=8,   views=1,    img_variant=1, status="open",
+        cites=8,   views=1,    img_variant=1,
         issue=None, published_at=None,
     ),
 ]

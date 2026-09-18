@@ -1,5 +1,6 @@
 from django.db import models
 from utils.models import BaseModel
+from utils.validators import validate_document, validate_image
 
 
 class Journal(BaseModel):
@@ -31,11 +32,13 @@ class Issue(BaseModel):
     is_upcoming = models.BooleanField(default=False, verbose_name='Tayyorlanmoqda')
     cover_image = models.ImageField(
         upload_to='journals/covers/%Y/', null=True, blank=True,
+        validators=[validate_image],
         verbose_name='Muqova rasmi (ixtiyoriy)',
         help_text='Yuklanmasa, palette ranglari asosida default cover ko\'rsatiladi.'
     )
     pdf_file = models.FileField(
         upload_to='journals/pdfs/%Y/', null=True, blank=True,
+        validators=[validate_document],
         verbose_name='PDF fayl (to\'liq son)',
         help_text='Jurnal sonining to\'liq PDF nusxasi. Yuklansa, son sahifasida ochiladi.'
     )

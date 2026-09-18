@@ -103,7 +103,7 @@ class AdminArticleInIssueSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Article
         fields = (
-            'id', 'title', 'slug', 'status', 'year', 'quarter',
+            'id', 'title', 'slug', 'year', 'quarter',
             'pages', 'min_read', 'authors_label', 'category_name', 'published_at',
         )
 

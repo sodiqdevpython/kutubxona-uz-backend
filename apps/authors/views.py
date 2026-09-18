@@ -8,9 +8,11 @@ from django.conf import settings
 
 from .models import Author
 from .serializers import AuthorListSerializer, AuthorDetailSerializer
+from utils.request_ip import client_ip
+from utils.cache import CachedListMixin, NS_AUTHORS
 
 
-class AuthorViewSet(viewsets.ReadOnlyModelViewSet):
+class AuthorViewSet(CachedListMixin, viewsets.ReadOnlyModelViewSet):
     """
     Profil egalari — kamida bitta maqolasi jurnalda chop etilgan mualliflar
     (Telegram bot, qo'lda yoki PDF parser orqali). AI ajratgan ismlar profil olmaydi.
@@ -26,11 +28,34 @@ class AuthorViewSet(viewsets.ReadOnlyModelViewSet):
     ordering_fields  = ['name']
     ordering         = ['name']
     lookup_field     = 'slug'
+    cache_namespace  = NS_AUTHORS
 
     def get_serializer_class(self):
         if self.action == 'retrieve':
             return AuthorDetailSerializer
         return AuthorListSerializer
+
+    def get_object(self):
+        """
+        Slug bo'yicha topadi. Topilmasa — eski (birlashtirilgan) manzillar
+        orasidan qidiradi, shunda eski havolalar 404 bermaydi.
+        """
+        from django.http import Http404
+        from .models import AuthorAlias
+
+        try:
+            return super().get_object()
+        except Http404:
+            slug = self.kwargs.get(self.lookup_field)
+            alias = (
+                AuthorAlias.objects
+                .select_related('author')
+                .filter(slug=slug)
+                .first()
+            )
+            if alias is None:
+                raise
+            return alias.author
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -42,8 +67,7 @@ class AuthorViewSet(viewsets.ReadOnlyModelViewSet):
     def _unique_view(request, author):
         """Bir IP+author 24 soatda 1 marta hisoblanadi."""
         from django.core.cache import cache
-        xff = request.META.get('HTTP_X_FORWARDED_FOR', '')
-        ip  = (xff.split(',')[0].strip() if xff else request.META.get('REMOTE_ADDR', '')) or 'unknown'
+        ip = client_ip(request)
         key = f'aview:{author.pk}:{ip}'
         if cache.add(key, 1, timeout=86400):
             author.increment_profile_views()

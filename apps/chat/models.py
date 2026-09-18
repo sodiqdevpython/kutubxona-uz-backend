@@ -10,6 +10,7 @@ Chat (Telegram-orqali):
 """
 from django.db import models
 from utils.models import BaseModel
+from utils.validators import validate_attachment, validate_image
 
 
 class Chat(BaseModel):
@@ -61,10 +62,12 @@ class Message(BaseModel):
     text        = models.TextField(blank=True, verbose_name='Matn / caption')
     image       = models.ImageField(
         upload_to='chat/images/%Y/%m/', null=True, blank=True,
+        validators=[validate_image],
         verbose_name='Rasm',
     )
     document    = models.FileField(
         upload_to='chat/files/%Y/%m/', null=True, blank=True,
+        validators=[validate_attachment],
         verbose_name='Fayl',
     )
 

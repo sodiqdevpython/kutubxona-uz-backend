@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from .models import Comment
 
@@ -13,6 +14,7 @@ class CommentSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ('id', 'created_at', 'replies')
 
+    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
     def get_replies(self, obj):
         qs = obj.replies.filter(is_approved=True)
         return CommentSerializer(qs, many=True).data

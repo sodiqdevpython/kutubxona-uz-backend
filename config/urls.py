@@ -1,9 +1,12 @@
+import os
+
 from django.contrib import admin
 from django.urls import path, re_path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.views.generic import RedirectView
 from django.views.static import serve as static_serve
+from django.contrib.auth.decorators import login_required
 from django.views.decorators.clickjacking import xframe_options_exempt
 from rest_framework.routers import DefaultRouter
 from drf_spectacular.views import (
@@ -15,9 +18,10 @@ from drf_spectacular.views import (
 from apps.articles.views  import (
     CategoryViewSet, ArticleViewSet,
     SubmissionDraftView, SubmissionFinalizeView, SubmissionCancelDraftView,
-    BotCheckAdminView, BotUserArticlesView,
+    BotCheckAdminView, BotUserArticlesView, AiStatusView,
 )
 from apps.authors.views   import AuthorViewSet
+from apps.panel.views    import CaptchaConfigView
 from apps.journals.views  import JournalViewSet, IssueViewSet
 from apps.comments.views  import CommentViewSet
 
@@ -46,6 +50,12 @@ urlpatterns = [
     # REST API (router)
     path('api/', include(router.urls)),
 
+    # Local AI holati (frontend "AI ulanmagan" modalini shu bilan boshqaradi)
+    path('api/ai/status/', AiStatusView.as_view(), name='ai-status'),
+
+    # CAPTCHA sozlamasi (login sahifasi uchun)
+    path('api/auth/captcha/', CaptchaConfigView.as_view(), name='captcha-config'),
+
     # Bot submission endpointlari (secret orqali himoyalangan)
     path('api/submit/draft/',         SubmissionDraftView.as_view(),       name='submit-draft'),
     path('api/submit/finalize/',      SubmissionFinalizeView.as_view(),    name='submit-finalize'),
@@ -62,14 +72,31 @@ urlpatterns = [
     # Central Asia (einfolib.uz'dan parse qilinadi)
     path('api/', include('apps.central_asia.urls')),
 
-    # OpenAPI schema + interactive docs
-    path('api/schema/',  SpectacularAPIView.as_view(),                       name='schema'),
-    path('api/docs/',    SpectacularSwaggerView.as_view(url_name='schema'),  name='swagger-ui'),
-    path('api/redoc/',   SpectacularRedocView.as_view(url_name='schema'),    name='redoc'),
+    # Hamkor API (tashqi xizmatlar — access/refresh token bilan)
+    path('api/partner/', include('apps.partner.urls')),
+
+    # OpenAPI schema + interaktiv hujjatlar.
+    # DIQQAT: faqat tizimga kirgan (admin panelga login qilgan) foydalanuvchilar
+    # ko'ra oladi — aks holda /admin/login/ ga yo'naltiriladi.
+    path('api/schema/',
+         login_required(SpectacularAPIView.as_view(), login_url='/admin/login/'),
+         name='schema'),
+    path('api/docs/',
+         login_required(SpectacularSwaggerView.as_view(url_name='schema'), login_url='/admin/login/'),
+         name='swagger-ui'),
+    path('api/redoc/',
+         login_required(SpectacularRedocView.as_view(url_name='schema'), login_url='/admin/login/'),
+         name='redoc'),
 ]
 
-if settings.DEBUG:
-    # ── Media: iframe da PDF ko'rsatish uchun X-Frame-Options ni o'chiramiz ──
+# ── Media fayllar ─────────────────────────────────────────────────────────────
+# Docker'da /media/ so'rovlarini nginx to'g'ridan-to'g'ri diskdan beradi va
+# bu yo'lgacha yetib kelmaydi. Ammo backend'ga to'g'ridan-to'g'ri murojaat
+# qilinganda (masalan, :8000 dagi Swagger yoki admin panel) fayllar
+# ochilishi kerak — shuning uchun DEBUG'dan qat'i nazar xizmat qilamiz.
+# O'chirish uchun: SERVE_MEDIA=0
+if os.environ.get('SERVE_MEDIA', '1') == '1':
+    # iframe da PDF ko'rsatish uchun X-Frame-Options ni o'chiramiz
     media_url = settings.MEDIA_URL.lstrip('/')
     urlpatterns += [
         re_path(
@@ -78,5 +105,7 @@ if settings.DEBUG:
             {'document_root': settings.MEDIA_ROOT},
         ),
     ]
-    # Static — o'zgartirilmasdan
+
+if settings.DEBUG:
+    # Static — o'zgartirilmasdan (productionda WhiteNoise beradi)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

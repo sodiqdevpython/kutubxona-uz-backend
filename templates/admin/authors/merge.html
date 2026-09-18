@@ -1,0 +1,177 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block extrahead %}
+{{ block.super }}
+{% if pick_form %}{{ pick_form.media }}{% endif %}
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label='authors' %}">Mualliflar</a>
+  &rsaquo; <a href="{% url 'admin:authors_author_changelist' %}">Mualliflar</a>
+  &rsaquo; Profillarni birlashtirish
+</div>
+{% endblock %}
+
+{% block content %}
+<style>
+  .kb-card    { background:#fff; border:1px solid #e0e0e0; border-radius:8px;
+                padding:18px 20px; margin-bottom:18px; }
+  .kb-card h2 { margin:0 0 12px; font-size:15px; }
+  .kb-hint    { font-size:12.5px; color:#666; line-height:1.55; }
+  .kb-warn    { background:#fff8e1; border:1px solid #ffe082; border-radius:6px;
+                padding:12px 14px; font-size:13px; margin-bottom:18px; line-height:1.55; }
+  .kb-row     { display:grid; grid-template-columns:150px 1fr 1fr; gap:14px;
+                padding:12px 0; border-bottom:1px solid #f0f0f0; align-items:start; }
+  .kb-row:last-child { border-bottom:0; }
+  .kb-row > .lbl { font-weight:600; font-size:12.5px; color:#444; padding-top:6px; }
+  .kb-opt     { border:1px solid #e0e0e0; border-radius:6px; padding:9px 11px;
+                font-size:13px; background:#fafafa; }
+  .kb-opt label { display:flex; gap:8px; align-items:flex-start; cursor:pointer; margin:0; }
+  .kb-opt ul  { list-style:none; margin:0; padding:0; }
+  .kb-opt li  { margin:0; }
+  .kb-val     { color:#111; word-break:break-word; white-space:pre-wrap; max-height:120px;
+                overflow:auto; display:block; }
+  .kb-val.empty { color:#aaa; font-style:italic; }
+  .kb-head    { display:grid; grid-template-columns:150px 1fr 1fr; gap:14px;
+                font-size:11px; text-transform:uppercase; letter-spacing:.06em;
+                color:#888; padding-bottom:8px; border-bottom:2px solid #eee; }
+  .kb-keep    { color:#1a7f37; }
+  .kb-drop    { color:#b3261e; }
+  table.kb-t    { width:100%; border-collapse:collapse; font-size:13px; }
+  table.kb-t td { padding:6px 0; border-bottom:1px solid #f5f5f5; }
+  table.kb-t td:first-child { color:#666; width:230px; }
+  .kb-avatar  { width:54px; height:54px; border-radius:50%; object-fit:cover; }
+  .kb-pick    { display:grid; gap:14px; max-width:520px; }
+  .kb-pick .f { display:flex; flex-direction:column; gap:5px; }
+  .kb-pick label { font-weight:600; font-size:13px; }
+</style>
+
+<h1>Profillarni birlashtirish</h1>
+
+{% if pick_form %}
+  {# ── 1-qadam: ikki profil tanlash ────────────────────────────────────── #}
+  <div class="kb-card">
+    <h2>Qaysi ikki profil bitta qilinadi?</h2>
+    <p class="kb-hint" style="margin-bottom:16px">
+      Bitta odam kirill va lotin yozuvida ikki marta kelib qolgan bo'lsa
+      (masalan «Абдуллаев Ботир» va «Abdullayev Botir») — shu yerda ularni
+      yagona profilga qo'shasiz. Keyingi qadamda har bir maydonni
+      qaysi profildan olishni tanlaysiz.
+    </p>
+
+    <form method="post" class="kb-pick">
+      {% csrf_token %}
+      <input type="hidden" name="step" value="pick">
+
+      {% if pick_form.non_field_errors %}
+        <ul class="errorlist">{% for e in pick_form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+
+      {% for field in pick_form %}
+        <div class="f">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<span class="kb-hint">{{ field.help_text }}</span>{% endif %}
+          {{ field.errors }}
+        </div>
+      {% endfor %}
+
+      <div><button type="submit" class="default">Davom etish &rarr;</button></div>
+    </form>
+  </div>
+
+{% else %}
+  {# ── 2-qadam: maydonlarni tanlash ────────────────────────────────────── #}
+  <div class="kb-warn">
+    <strong>Diqqat:</strong> «{{ source.name }}» profili butunlay
+    <strong>o'chiriladi</strong>, uning maqolalari, topshiriqlari va chati
+    «{{ target.name }}» ga ko'chadi. Bu amalni ortga qaytarib bo'lmaydi.
+    Eski manzil (<code>/authors/{{ source.slug }}</code>) ishlashda davom etadi.
+  </div>
+
+  <div class="kb-card">
+    <h2>Nima ko'chadi</h2>
+    <table class="kb-t">
+      <tr><td>Maqolalar</td><td><strong>{{ preview.articles_moving }}</strong> ta ko'chadi{% if preview.articles_duplicate %}, {{ preview.articles_duplicate }} ta takroriy bog'lanish olib tashlanadi{% endif %}</td></tr>
+      <tr><td>Telegram topshiriqlari</td><td><strong>{{ preview.submissions }}</strong> ta</td></tr>
+      <tr><td>Chat</td>
+        <td>
+          {% if preview.source_has_chat and preview.target_has_chat %}
+            {{ preview.chat_messages }} ta xabar mavjud chatga qo'shiladi
+          {% elif preview.source_has_chat %}
+            chat ({{ preview.chat_messages }} ta xabar) to'liq ko'chadi
+          {% else %}—{% endif %}
+        </td></tr>
+      <tr><td>Profil ko'rishlari</td><td>qo'shiladi → <strong>{{ preview.profile_views_sum }}</strong></td></tr>
+    </table>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="step" value="merge">
+    <input type="hidden" name="target_id" value="{{ target.pk }}">
+    <input type="hidden" name="source_id" value="{{ source.pk }}">
+
+    <div class="kb-card">
+      <h2>Har bir maydon qaysi profildan olinsin?</h2>
+      <p class="kb-hint" style="margin-bottom:14px">
+        Standart holatda bo'sh bo'lmagan qiymat tanlangan. Kerakli tomonni belgilang.
+      </p>
+
+      <div class="kb-head">
+        <div>Maydon</div>
+        <div class="kb-keep">✅ Saqlanadi — {{ target.name }}</div>
+        <div class="kb-drop">🗑 O'chiriladi — {{ source.name }}</div>
+      </div>
+
+      {% for row in fields_form.rows %}
+        <div class="kb-row">
+          <div class="lbl">{{ row.label }}</div>
+          {% for choice in row.field %}
+            <div class="kb-opt">
+              <label>
+                {{ choice.tag }}
+                <span>
+                  {% if forloop.first %}
+                    {% if row.is_image %}
+                      {% if row.target %}<img class="kb-avatar" src="{{ row.target.url }}" alt="">{% else %}<span class="kb-val empty">rasm yo'q</span>{% endif %}
+                    {% elif row.target %}
+                      <span class="kb-val">{{ row.target }}</span>
+                    {% else %}
+                      <span class="kb-val empty">bo'sh</span>
+                    {% endif %}
+                  {% else %}
+                    {% if row.is_image %}
+                      {% if row.source %}<img class="kb-avatar" src="{{ row.source.url }}" alt="">{% else %}<span class="kb-val empty">rasm yo'q</span>{% endif %}
+                    {% elif row.source %}
+                      <span class="kb-val">{{ row.source }}</span>
+                    {% else %}
+                      <span class="kb-val empty">bo'sh</span>
+                    {% endif %}
+                  {% endif %}
+                </span>
+              </label>
+            </div>
+          {% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="kb-card">
+      <label style="display:flex; gap:9px; align-items:flex-start; font-size:13.5px; cursor:pointer">
+        <input type="checkbox" name="confirm" required style="margin-top:3px">
+        <span>«{{ source.name }}» profili o'chirilishini va uni qaytarib
+        bo'lmasligini tushundim.</span>
+      </label>
+      <div style="margin-top:16px; display:flex; gap:10px; align-items:center">
+        <button type="submit" class="default">Birlashtirish</button>
+        <a href="{% url 'admin:authors_author_merge' %}" class="button">Boshqa profillarni tanlash</a>
+        <a href="{% url 'admin:authors_author_changelist' %}">Bekor qilish</a>
+      </div>
+    </div>
+  </form>
+{% endif %}
+{% endblock %}

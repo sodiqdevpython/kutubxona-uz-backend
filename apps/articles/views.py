@@ -10,6 +10,11 @@ from django.db.models import Q
 import django_filters
 
 from utils.telegram import send_message as tg_send
+from utils.request_ip import client_ip
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
+
+from utils.cache import CachedListMixin, cached_action, NS_CATALOG
 from .models import Category, Article, ArticleSubmission
 from .serializers import (
     CategorySerializer,
@@ -34,28 +39,28 @@ class ArticleFilter(django_filters.FilterSet):
       ?years=2026,2025          — year IN filter
       ?quarters=1,2             — quarter IN filter
       ?author=some-slug         — author slug exact match
-      ?status=open              — exact status
     """
     categories = _CharInFilter(field_name='category__slug', lookup_expr='in')
     years      = _NumberInFilter(field_name='year',    lookup_expr='in')
     quarters   = _NumberInFilter(field_name='quarter', lookup_expr='in')
     author     = django_filters.CharFilter(field_name='authors__slug', lookup_expr='exact')
-    status     = django_filters.CharFilter(field_name='status', lookup_expr='exact')
 
     class Meta:
         model  = Article
         fields: list = []
 
 
-class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
+class CategoryViewSet(CachedListMixin, viewsets.ReadOnlyModelViewSet):
     """Faqat kamida bitta chop etilgan maqolasi bo'lgan yo'nalishlar."""
+    cache_namespace = NS_CATALOG
     queryset = Category.objects.filter(articles__issue__isnull=False).distinct()
     serializer_class = CategorySerializer
     pagination_class = None
 
 
-class ArticleViewSet(viewsets.ReadOnlyModelViewSet):
+class ArticleViewSet(CachedListMixin, viewsets.ReadOnlyModelViewSet):
     """Faqat jurnal soniga kiritilgan (chop etilgan) maqolalar."""
+    cache_namespace = NS_CATALOG
     queryset = (
         Article.objects
         .filter(issue__isnull=False)
@@ -91,8 +96,7 @@ class ArticleViewSet(viewsets.ReadOnlyModelViewSet):
         from django.core.cache import cache
 
         # Mijoz IP'sini olish (proxy ortida bo'lsa X-Forwarded-For dan)
-        xff = request.META.get('HTTP_X_FORWARDED_FOR', '')
-        ip  = (xff.split(',')[0].strip() if xff else request.META.get('REMOTE_ADDR', '')) or 'unknown'
+        ip = client_ip(request)
 
         key = f'view:{article.pk}:{ip}'
         # cache.add() True qaytaradi faqat agar kalit yo'q bo'lsa
@@ -100,6 +104,7 @@ class ArticleViewSet(viewsets.ReadOnlyModelViewSet):
             article.increment_views()
 
     @action(detail=False, url_path='search')
+    @cached_action(namespace=NS_CATALOG)
     def search_articles(self, request):
         """GET /api/articles/search/?q=… — title, excerpt, keywords, mualliflar bo'yicha."""
         q  = request.query_params.get('q', '').strip()
@@ -116,6 +121,7 @@ class ArticleViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(serializer.data)
 
     @action(detail=False, url_path='stats', permission_classes=[AllowAny])
+    @cached_action(namespace=NS_CATALOG, ttl=300)
     def stats(self, request):
         """
         GET /api/articles/stats/
@@ -151,6 +157,10 @@ class ArticleViewSet(viewsets.ReadOnlyModelViewSet):
         if len(question) > 500:
             return Response({'error': 'Savol juda uzun (500 belgidan ortiq)'}, status=400)
 
+        from utils.local_llm import health, unavailable_payload
+        if not health()['available']:
+            return Response(unavailable_payload(), status=503)
+
         doc_id = (article.llm_document_id or '').strip()
         if not doc_id:
             return Response(
@@ -160,8 +170,7 @@ class ArticleViewSet(viewsets.ReadOnlyModelViewSet):
 
         # Sodda IP rate limit — 1 IP / 15 sekundda 1 ta savol
         from django.core.cache import cache
-        xff = request.META.get('HTTP_X_FORWARDED_FOR', '')
-        ip  = (xff.split(',')[0].strip() if xff else request.META.get('REMOTE_ADDR', '')) or 'unknown'
+        ip = client_ip(request)
         rl_key = f'ask:{article.pk}:{ip}'
         if not cache.add(rl_key, 1, timeout=15):
             return Response({'error': 'Juda tez-tez savol berayapsiz. Bir oz kuting.'}, status=429)
@@ -184,6 +193,7 @@ class ArticleViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({'answer': answer})
 
     @action(detail=True, url_path='related')
+    @cached_action(namespace=NS_CATALOG)
     def related(self, request, slug=None):
         """
         GET /api/articles/<slug>/related/
@@ -496,3 +506,41 @@ class BotUserArticlesView(APIView):
             'user':      user_info,
             'results':   results,
         })
+
+# ── Local AI holati ───────────────────────────────────────────────────────────
+
+@extend_schema(
+    summary='Local AI holati',
+    description=(
+        'Local AI (LLM) xizmati ishlayaptimi — frontend AI tugmalarini bosishdan '
+        "oldin shu endpointni tekshiradi va ulanmagan bo'lsa modal ko'rsatadi."
+    ),
+    responses={200: OpenApiTypes.OBJECT},
+)
+class AiStatusView(APIView):
+    """
+    GET /api/ai/status/  →  {"available": false, "reason": "unreachable"}
+
+    Natija 60 sekund keshlanadi. `?force=1` — keshni chetlab o'tib qayta tekshiradi
+    (faqat staff uchun).
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        from utils.local_llm import health
+
+        force = (
+            request.query_params.get('force') == '1'
+            and request.user.is_authenticated
+            and request.user.is_staff
+        )
+        info = health(force=force)
+
+        payload = {
+            'available': info['available'],
+            'reason':    info['reason'],
+        }
+        # base_url faqat adminlarga (ichki manzilni oshkor qilmaymiz)
+        if request.user.is_authenticated and request.user.is_staff:
+            payload['base_url'] = info['base_url']
+        return Response(payload)

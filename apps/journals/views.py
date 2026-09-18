@@ -5,15 +5,16 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import Journal, Issue
 from .serializers import JournalSerializer, IssueSerializer
+from utils.cache import CachedListMixin, cached_action, NS_CATALOG
 
 
-class JournalViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+class JournalViewSet(CachedListMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     queryset         = Journal.objects.prefetch_related('issues')
     serializer_class = JournalSerializer
     pagination_class = None
 
 
-class IssueViewSet(viewsets.ReadOnlyModelViewSet):
+class IssueViewSet(CachedListMixin, viewsets.ReadOnlyModelViewSet):
     queryset = Issue.objects.select_related('journal').prefetch_related('articles')
     serializer_class = IssueSerializer
     filter_backends  = [DjangoFilterBackend]
@@ -21,6 +22,7 @@ class IssueViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None
 
     @action(detail=False, url_path='archive')
+    @cached_action(namespace=NS_CATALOG)
     def archive(self, request):
         """
         GET /api/issues/archive/

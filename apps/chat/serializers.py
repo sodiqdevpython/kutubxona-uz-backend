@@ -12,9 +12,9 @@ class MessageSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         return request.build_absolute_uri(f.url) if request else f.url
 
-    def get_image_url(self, obj):    return self._abs(obj.image)
-    def get_document_url(self, obj): return self._abs(obj.document)
-    def get_document_name(self, obj):
+    def get_image_url(self, obj) -> str | None:    return self._abs(obj.image)
+    def get_document_url(self, obj) -> str | None: return self._abs(obj.document)
+    def get_document_name(self, obj) -> str | None:
         if not obj.document: return None
         return obj.document.name.split('/')[-1]
 
@@ -38,7 +38,7 @@ class ChatListSerializer(serializers.ModelSerializer):
 
     last_message     = serializers.SerializerMethodField()
 
-    def get_last_message(self, obj):
+    def get_last_message(self, obj) -> dict | None:
         last = obj.messages.order_by('-created_at').first()
         if not last: return None
         return {

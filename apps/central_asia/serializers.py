@@ -15,7 +15,7 @@ class CentralAsiaPostListSerializer(serializers.ModelSerializer):
             'doi', 'source_category', 'source_url', 'published_at', 'created_at',
         )
 
-    def get_image_url(self, obj):
+    def get_image_url(self, obj) -> str | None:
         if not obj.image:
             return None
         request = self.context.get('request')

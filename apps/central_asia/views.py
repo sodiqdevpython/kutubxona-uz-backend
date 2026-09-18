@@ -4,13 +4,15 @@ from rest_framework import viewsets, filters
 from rest_framework.response import Response
 
 from .models import CentralAsiaPost
+from utils.request_ip import client_ip
 from .serializers import (
     CentralAsiaPostListSerializer,
     CentralAsiaPostDetailSerializer,
 )
+from utils.cache import CachedListMixin, NS_CENTRAL_ASIA
 
 
-class CentralAsiaPostViewSet(viewsets.ReadOnlyModelViewSet):
+class CentralAsiaPostViewSet(CachedListMixin, viewsets.ReadOnlyModelViewSet):
     """
     GET /api/central-asia/                         — pagination + search
     GET /api/central-asia/<slug>/                  — detail (bizning view'ni oshiradi)
@@ -22,6 +24,7 @@ class CentralAsiaPostViewSet(viewsets.ReadOnlyModelViewSet):
     # sort_order — manba saytdagi tartib (0 = eng yangi, 1-sahifada birinchi)
     ordering         = ['sort_order', '-created_at']
     lookup_field     = 'slug'
+    cache_namespace  = NS_CENTRAL_ASIA
 
     def get_serializer_class(self):
         if self.action == 'retrieve':
@@ -41,8 +44,7 @@ class CentralAsiaPostViewSet(viewsets.ReadOnlyModelViewSet):
     @staticmethod
     def _unique_view(request, post: CentralAsiaPost):
         """Bir IP + post kombinatsiyasi uchun 24 soatda 1 marta hisoblanadi."""
-        xff = request.META.get('HTTP_X_FORWARDED_FOR', '')
-        ip  = (xff.split(',')[0].strip() if xff else request.META.get('REMOTE_ADDR', '')) or 'unknown'
+        ip = client_ip(request)
         key = f'ca:view:{post.pk}:{ip}'
         if cache.add(key, 1, timeout=86400):
             CentralAsiaPost.objects.filter(pk=post.pk).update(

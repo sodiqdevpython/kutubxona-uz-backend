@@ -13,9 +13,24 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class AuthorBriefSerializer(serializers.ModelSerializer):
+    """
+    Maqola ro'yxati va detalida ko'rinadigan qisqa muallif ma'lumoti.
+
+    `avatar_url` — profil rasmi. Maqola qo'shilgan paytda rasm bo'lmagan bo'lsa
+    ham, keyinchalik profilga rasm yuklansa shu yerda darhol ko'rinadi (rasm
+    maqolaga nusxalanmaydi — har doim profildan o'qiladi).
+    """
+    avatar_url = serializers.SerializerMethodField()
+
     class Meta:
         model  = Author
-        fields = ('id', 'name', 'slug', 'initials', 'avatar_idx')
+        fields = ('id', 'name', 'slug', 'initials', 'avatar_idx', 'avatar_url')
+
+    def get_avatar_url(self, obj) -> str | None:
+        if not obj.avatar:
+            return None
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.avatar.url) if request else obj.avatar.url
 
 
 class ArticleListSerializer(serializers.ModelSerializer):
@@ -31,7 +46,7 @@ class ArticleListSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'title', 'slug', 'excerpt',
             'category', 'authors', 'author_label', 'author_names',
-            'status', 'year', 'quarter',
+            'year', 'quarter',
             'pages', 'min_read', 'cites', 'views',
             'img_variant', 'image_url', 'keywords', 'published_at',
         )
@@ -43,7 +58,7 @@ class ArticleListSerializer(serializers.ModelSerializer):
     @extend_schema_field(AuthorBriefSerializer(many=True))
     def get_authors(self, obj):
         ordered = obj.authors.all().order_by('articleauthor__order')
-        return AuthorBriefSerializer(ordered, many=True).data
+        return AuthorBriefSerializer(ordered, many=True, context=self.context).data
 
     @extend_schema_field({'type': 'array', 'items': {'type': 'string'}})
     def get_author_names(self, obj):

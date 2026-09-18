@@ -1,6 +1,7 @@
 from django.db import models
 from slugify import slugify
 from utils.models import BaseModel
+from utils.validators import validate_image
 
 
 class Author(BaseModel):
@@ -26,6 +27,7 @@ class Author(BaseModel):
     avatar_idx       = models.PositiveSmallIntegerField(default=0, verbose_name='Avatar rangi (0–4)')
     avatar           = models.ImageField(
         upload_to='authors/avatars/', null=True, blank=True,
+        validators=[validate_image],
         verbose_name='Rasm (Telegram orqali yuklangan)'
     )
     profile_views    = models.PositiveIntegerField(
@@ -77,3 +79,28 @@ class Author(BaseModel):
 
     def increment_profile_views(self):
         Author.objects.filter(pk=self.pk).update(profile_views=models.F('profile_views') + 1)
+
+class AuthorAlias(BaseModel):
+    """
+    Birlashtirilgan (o'chirilgan) profilning eski slugi.
+
+    Ikki profil bitta qilinganda yo'qolgan profil URL'i 404 bermasligi kerak —
+    shu jadval orqali eski havola yangi profilga olib boradi.
+    """
+    author = models.ForeignKey(
+        Author, on_delete=models.CASCADE,
+        related_name='aliases', verbose_name='Muallif',
+    )
+    slug   = models.SlugField(
+        max_length=220, unique=True, db_index=True,
+        verbose_name='Eski slug',
+    )
+    note   = models.CharField(max_length=300, blank=True, verbose_name='Izoh')
+
+    class Meta:
+        verbose_name        = 'Muallifning eski manzili'
+        verbose_name_plural = 'Mualliflarning eski manzillari'
+        ordering            = ['slug']
+
+    def __str__(self):
+        return f'{self.slug} -> {self.author.name}'

@@ -3,6 +3,8 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
+from utils.throttles import CommentBurstThrottle, CommentSustainedThrottle
+
 from .models import Comment
 from .serializers import CommentSerializer, CommentCreateSerializer
 
@@ -16,6 +18,9 @@ class CommentViewSet(
     queryset         = Comment.objects.filter(is_approved=True, parent=None)
     filter_backends  = [DjangoFilterBackend]
     filterset_fields = ['article', 'issue']
+    # Faqat POST ga ta'sir qiladi: bitta IP daqiqada 1 ta, soatiga 10 ta izoh.
+    # Tezliklar .env dan: COMMENT_BURST_LIMIT / COMMENT_RATE_LIMIT
+    throttle_classes = [CommentBurstThrottle, CommentSustainedThrottle]
 
     def get_serializer_class(self):
         if self.request.method == 'POST':

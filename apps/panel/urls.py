@@ -6,6 +6,7 @@ urlpatterns = [
     # ── Auth ──────────────────────────────────────────────────────────────────
     path('auth/login/',   views.AdminLoginView.as_view(),   name='admin-login'),
     path('auth/refresh/', TokenRefreshView.as_view(),        name='admin-refresh'),
+    path('auth/logout/',  views.AdminLogoutView.as_view(),   name='admin-logout'),
     path('auth/me/',      views.CurrentUserView.as_view(),   name='admin-me'),
 
     # ── Mualliflar ────────────────────────────────────────────────────────────

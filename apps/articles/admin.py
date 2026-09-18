@@ -22,8 +22,8 @@ class ArticleAuthorInline(admin.TabularInline):
 
 @admin.register(Article)
 class ArticleAdmin(admin.ModelAdmin):
-    list_display    = ('title', 'category', 'issue', 'status', 'year', 'views', 'has_file', 'has_content')
-    list_filter     = ('status', 'year', 'quarter', 'category')
+    list_display    = ('title', 'category', 'issue', 'year', 'views', 'has_file', 'has_content')
+    list_filter     = ('year', 'quarter', 'category')
     search_fields   = ('title', 'excerpt')
     readonly_fields = ('slug', 'views', 'content_preview')
     inlines         = [ArticleAuthorInline]
@@ -37,7 +37,7 @@ class ArticleAdmin(admin.ModelAdmin):
             'description': 'DOCX yoki PDF yuklang. Saqlashda avtomatik parse qilinadi.',
         }),
         ('Tarkib (HTML)', {'fields': ('content', 'content_preview'), 'classes': ('collapse',)}),
-        ('Meta', {'fields': ('status', 'year', 'quarter', 'pages', 'min_read', 'cites', 'img_variant', 'published_at')}),
+        ('Meta', {'fields': ('year', 'quarter', 'pages', 'min_read', 'cites', 'img_variant', 'published_at')}),
         ('Statistika', {'fields': ('views',), 'classes': ('collapse',)}),
     )
 

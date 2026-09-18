@@ -1,7 +1,8 @@
 from django.db.models import Q
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework.exceptions import AuthenticationFailed
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -11,6 +12,8 @@ from django.conf import settings
 from apps.articles.models import Article, ArticleSubmission, Category, Keyword, ParsedArticle
 from apps.authors.models import Author
 from apps.journals.models import Journal, Issue
+from utils.request_ip import client_ip
+from utils.throttles import ClientIPThrottle
 from utils.telegram import send_message as tg_send
 from .serializers import (
     AdminAuthorSerializer,
@@ -20,6 +23,11 @@ from .serializers import (
     AdminCategorySerializer,
     ParsedArticleSerializer,
 )
+
+
+class LoginThrottle(ClientIPThrottle):
+    """Bitta IP dan login urinishlari soni (.env: LOGIN_RATE_LIMIT)."""
+    scope = 'login'
 
 
 # ── Ruxsat ────────────────────────────────────────────────────────────────────
@@ -46,7 +54,72 @@ class AdminTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 
 class AdminLoginView(TokenObtainPairView):
+    """
+    POST /api/admin/auth/login/  {username, password, captcha_token?}
+
+    CAPTCHA yoqilgan bo'lsa (`.env` da kalitlar bor) `captcha_token` majburiy.
+    Bundan tashqari IP bo'yicha chegara bor — parol tanlashga qarshi.
+    """
     serializer_class = AdminTokenObtainPairSerializer
+    throttle_classes = [LoginThrottle]
+
+    def post(self, request, *args, **kwargs):
+        from utils import captcha
+
+        if captcha.is_enabled():
+            token = (
+                request.data.get('captcha_token')
+                or request.data.get('captcha')
+                or ''
+            )
+            ok, code = captcha.verify(token, client_ip(request))
+            if not ok:
+                return Response(
+                    {'detail': "Tekshiruvdan o'tmadingiz. Qaytadan urinib ko'ring.",
+                     'error': code},
+                    status=400,
+                )
+
+        return super().post(request, *args, **kwargs)
+
+
+class CaptchaConfigView(APIView):
+    """
+    GET /api/auth/captcha/
+    Frontend login sahifasi shu yerdan CAPTCHA sozlamasini oladi.
+    Maxfiy kalit BERILMAYDI.
+    """
+    authentication_classes = []
+    permission_classes     = [AllowAny]
+
+    def get(self, request):
+        from utils import captcha
+        return Response(captcha.public_config())
+
+
+class AdminLogoutView(APIView):
+    """
+    POST /api/admin/auth/logout/  {refresh}
+
+    Refresh tokenni qora ro'yxatga qo'shadi — o'g'irlangan bo'lsa ham
+    boshqa ishlamaydi. Access token o'z muddatigacha amal qiladi
+    (uni qisqartirish uchun ADMIN_ACCESS_LIFETIME_HOURS ni kamaytiring).
+    """
+    permission_classes = [IsStaff]
+
+    def post(self, request):
+        from rest_framework_simplejwt.exceptions import TokenError
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        raw = (request.data.get('refresh') or '').strip()
+        if not raw:
+            return Response({'error': 'refresh token kerak'}, status=400)
+        try:
+            RefreshToken(raw).blacklist()
+        except TokenError:
+            # Allaqachon bekor qilingan yoki muddati tugagan — muammo emas
+            pass
+        return Response({'ok': True})
 
 
 class CurrentUserView(APIView):
@@ -265,7 +338,6 @@ class AdminSubmissionApproveView(APIView):
                 references=sub.references or '',
                 author_names=sub.extracted_authors or '',   # AI mualliflar — matn (profilsiz)
                 category=category,
-                status='open',
                 year=timezone.now().year,
             )
             if sub.source_file:
@@ -329,7 +401,11 @@ class AdminSubmissionAIExtractView(APIView):
         import logging
         logger = logging.getLogger(__name__)
 
-        from utils.local_llm import extract_metadata_from_file
+        from utils.local_llm import extract_metadata_from_file, health, unavailable_payload
+
+        # Local AI o'chiq bo'lsa — darhol tushunarli javob (frontend modal chiqaradi)
+        if not health()['available']:
+            return Response(unavailable_payload(), status=503)
 
         try:
             sub = ArticleSubmission.objects.get(pk=pk)
@@ -496,6 +572,11 @@ class AdminJournalListView(APIView):
         return Response([{'id': str(j.id), 'title': j.title, 'issn': j.issn} for j in journals])
 
 
+# operationId to'qnashuvi bo'lmasligi uchun: /issues/ (list) va /issues/{id}/ (detail)
+@extend_schema_view(
+    get=extend_schema(operation_id='admin_issues_list', summary='Jurnal sonlari roʻyxati'),
+    post=extend_schema(operation_id='admin_issues_create', summary='Yangi jurnal soni'),
+)
 class AdminIssueListView(APIView):
     from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
     parser_classes     = [MultiPartParser, FormParser, JSONParser]
@@ -726,7 +807,6 @@ class AdminArticleCreateView(APIView):
             references=(request.data.get('references') or '').strip(),
             author_names=(request.data.get('author_names') or '').strip(),
             category=category,
-            status=request.data.get('status') or 'open',
             year=issue.year if issue else timezone.now().year,
         )
         if 'source_file' in request.FILES:
@@ -769,7 +849,11 @@ class AdminArticleTrainAIView(APIView):
     permission_classes = [IsStaff]
 
     def post(self, request, pk):
-        from utils.local_llm import upload_and_wait
+        from utils.local_llm import upload_and_wait, health, unavailable_payload
+
+        if not health()['available']:
+            return Response(unavailable_payload(), status=503)
+
         try:
             article = Article.objects.get(pk=pk)
         except Article.DoesNotExist:
@@ -981,7 +1065,6 @@ class AdminParsedSaveView(APIView):
         # ── Maqola yaratish ───────────────────────────────────────────────────
         article = Article(
             title=pa.title or (f'{pa.author_name} maqolasi' if pa.author_name else 'Maqola'),
-            status='open',
             year=issue.year,
             img_variant=(pa.order or 1) % 4,
             issue=issue,

@@ -8,10 +8,15 @@ Chat endpointlar:
 - POST   /api/admin/chat/<chat_id>/read/     — admin: barchasini o'qildi qilish
 
 - POST   /api/chat/bot-message/              — bot: userdan kelgan xabar (secret)
+
+Har bir o'zgarish WebSocket orqali admin panelga push qilinadi (`events.py`),
+shuning uchun frontendda polling (setInterval) kerak emas.
 """
+import logging
+
 from django.conf import settings
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
 
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -21,8 +26,11 @@ from rest_framework.views import APIView
 from apps.authors.models import Author
 from utils.telegram import send_message, send_photo, send_document
 
+from . import events
 from .models import Chat, Message
 from .serializers import ChatListSerializer, MessageSerializer
+
+logger = logging.getLogger(__name__)
 
 
 # ── Ruxsat ────────────────────────────────────────────────────────────────────
@@ -37,8 +45,12 @@ class IsStaff(IsAuthenticated):
 class AdminChatListView(APIView):
     """
     GET /api/admin/chat/?offset=0&limit=20&search=…
-    Telegram bot orqali kamida bitta submission yuborgan har bir muallif uchun
-    Chat avtomatik yaratiladi va qaytariladi (admin u bilan suhbatni boshlashi mumkin).
+
+    Ro'yxatga tushadi:
+      • Telegram bot orqali kamida bitta submission yuborgan mualliflar
+        (ular uchun Chat avtomatik yaratiladi — admin suhbatni boshlashi mumkin);
+      • allaqachon suhbat ochilgan (foydalanuvchi yozgan yoki admin ochgan) chatlar.
+
     Pagination: offset/limit. Response: { results, has_more, next_offset, total }
     """
     permission_classes = [IsStaff]
@@ -59,7 +71,6 @@ class AdminChatListView(APIView):
 
         # ── Submission yuborgan har bir Telegram muallif uchun Chat yaratamiz ──
         # Bu idempotent: mavjud bo'lsa qayta yaratilmaydi.
-        from django.db.models import Q
         eligible_authors = (
             Author.objects
             .filter(telegram_chat_id__isnull=False, submissions__isnull=False)
@@ -73,10 +84,13 @@ class AdminChatListView(APIView):
         if new_chats:
             Chat.objects.bulk_create(new_chats)
 
-        # ── Asosiy query: faqat eligible (submission yuborgan) authorlar chatlari ──
+        # ── Asosiy query ──────────────────────────────────────────────────────
+        # Telegram'ga ulangan barcha mualliflar chatlari. Ilgari faqat
+        # submission yuborganlar chiqardi — natijada bot orqali yozgan, lekin
+        # hali maqola topshirmagan foydalanuvchining chati ko'rinmay qolardi.
         qs = (
             Chat.objects
-            .filter(author__in=eligible_authors)
+            .filter(author__telegram_chat_id__isnull=False)
             .select_related('author')
             .order_by('-last_message_at', '-created_at')
         )
@@ -112,7 +126,9 @@ class AdminChatByAuthorView(APIView):
         author = get_object_or_404(Author, slug=slug)
         if not author.telegram_chat_id:
             return Response({'error': "Bu muallifda Telegram chat_id yo'q"}, status=400)
-        chat, _ = Chat.objects.get_or_create(author=author)
+        chat, created = Chat.objects.get_or_create(author=author)
+        if created:
+            events.chat_updated(chat)
         data = ChatListSerializer(chat, context={'request': request}).data
         return Response(data)
 
@@ -163,24 +179,30 @@ class AdminChatSendView(APIView):
             is_read=True,
         )
 
-        # Telegram'ga yuborish (webhook — admin javobi)
+        # Telegram'ga yuborish — admin javobi foydalanuvchiga boradi
+        delivered  = False
         chat_tg_id = chat.author.telegram_chat_id
         if chat_tg_id:
             try:
                 if kind == 'photo' and msg.image:
-                    send_photo(chat_tg_id, msg.image.path, caption=text)
+                    delivered = send_photo(chat_tg_id, msg.image.path, caption=text)
                 elif kind == 'document' and msg.document:
-                    send_document(chat_tg_id, msg.document.path, caption=text)
+                    delivered = send_document(chat_tg_id, msg.document.path, caption=text)
                 else:
-                    send_message(chat_tg_id, text)
-            except Exception:
-                pass  # log qilingan
+                    delivered = send_message(chat_tg_id, text)
+            except Exception as exc:
+                logger.warning('Telegram yetkazib berilmadi (chat=%s): %s', chat.id, exc)
 
         # Chat metasini yangilash
         chat.last_message_at = msg.created_at
         chat.save(update_fields=['last_message_at', 'updated_at'])
 
-        return Response(MessageSerializer(msg, context={'request': request}).data, status=201)
+        # Real-time: boshqa ochiq admin oynalari ham darhol ko'radi
+        events.message_created(chat, msg)
+
+        payload = MessageSerializer(msg, context={'request': request}).data
+        payload['tg_delivered'] = delivered
+        return Response(payload, status=201)
 
 
 class AdminChatBlockView(APIView):
@@ -190,6 +212,7 @@ class AdminChatBlockView(APIView):
         chat = get_object_or_404(Chat, pk=chat_id)
         chat.is_blocked = not chat.is_blocked
         chat.save(update_fields=['is_blocked', 'updated_at'])
+        events.chat_updated(chat)
         return Response({'is_blocked': chat.is_blocked})
 
 
@@ -202,7 +225,9 @@ class AdminChatDeleteView(APIView):
 
     def delete(self, request, chat_id):
         chat = get_object_or_404(Chat, pk=chat_id)
+        deleted_id = str(chat.id)
         chat.delete()
+        events.chat_deleted(deleted_id)
         return Response(status=204)
 
 
@@ -215,6 +240,7 @@ class AdminChatReadView(APIView):
         chat.messages.filter(sender='user', is_read=False).update(is_read=True)
         chat.unread_count = 0
         chat.save(update_fields=['unread_count', 'updated_at'])
+        events.chat_read(chat.id)
         return Response({'ok': True})
 
 
@@ -222,19 +248,24 @@ class AdminChatReadView(APIView):
 
 class BotMessageView(APIView):
     """
-    POST /api/chat/bot-message/
-    Bot bizga xabar yuboradi (secret).
-    Talab:
+    POST /api/chat/bot-message/   (multipart yoki JSON)
+    Bot bizga foydalanuvchi xabarini yuboradi (secret bilan himoyalangan).
+
+    Maydonlar:
       secret        — BOT_SECRET
       chat_id       — Telegram user chat_id (Author.telegram_chat_id)
-      text          — matn
+      text          — matn / caption
+      image         — File (ixtiyoriy, rasm)
+      document      — File (ixtiyoriy, hujjat)
       tg_message_id — Telegram msg id (ixtiyoriy)
+
     Qoidalar:
-      - Author topilmasa → 404 (bot foydalanuvchiga "siz hali ro'yxatdan o'tmagansiz" deydi)
-      - Chat mavjud bo'lmasa — avtomatik yaratiladi (foydalanuvchi suhbatni boshlashi mumkin)
+      - Author topilmasa → 404 (bot foydalanuvchiga "ro'yxatdan o'tmagansiz" deydi)
+      - Chat mavjud bo'lmasa — avtomatik yaratiladi
       - is_blocked=True → 403
     """
     permission_classes = [AllowAny]
+    parser_classes     = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request):
         if request.data.get('secret') != getattr(settings, 'BOT_SECRET', ''):
@@ -245,8 +276,11 @@ class BotMessageView(APIView):
         except (TypeError, ValueError):
             return Response({'error': 'chat_id required'}, status=400)
 
-        text = (request.data.get('text') or '').strip()
-        if not text:
+        text     = (request.data.get('text') or '').strip()
+        image    = request.FILES.get('image')
+        document = request.FILES.get('document')
+
+        if not text and not image and not document:
             return Response({'error': 'text required'}, status=400)
 
         # 1) Muallifni topish
@@ -269,14 +303,20 @@ class BotMessageView(APIView):
         except (TypeError, ValueError):
             tg_msg_id = None
 
+        kind = 'photo' if image else ('document' if document else 'text')
+
         msg = Message.objects.create(
-            chat=chat, sender='user', kind='text',
-            text=text, tg_message_id=tg_msg_id,
+            chat=chat, sender='user', kind=kind,
+            text=text, image=image, document=document,
+            tg_message_id=tg_msg_id,
         )
 
         # 5) Chat meta + unread inkrement
         chat.last_message_at = msg.created_at
         chat.unread_count   = chat.unread_count + 1
         chat.save(update_fields=['last_message_at', 'unread_count', 'updated_at'])
+
+        # 6) Real-time: admin panel darhol ko'radi (polling'siz)
+        events.message_created(chat, msg)
 
         return Response({'ok': True, 'message_id': str(msg.id)}, status=201)

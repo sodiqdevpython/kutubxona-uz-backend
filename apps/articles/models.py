@@ -3,6 +3,7 @@ from django.db import models
 from django.utils import timezone
 from slugify import slugify
 from utils.models import BaseModel
+from utils.validators import validate_document, validate_image
 
 
 class Category(BaseModel):
@@ -80,7 +81,9 @@ class ArticleAuthor(BaseModel):
 
 
 class Article(BaseModel):
-    STATUS_CHOICES = [('open', 'Ochiq kirish'), ('lock', 'Obunachi')]
+    # Eslatma: ilgari `status` maydoni bor edi ('open' / 'lock' — obunachi uchun).
+    # Jurnalda obuna tizimi yo'q: tasdiqlangan maqola hammaga ochiq.
+    # Shuning uchun maydon 0008 migratsiyasida olib tashlandi.
 
     # ── Asosiy matn ──────────────────────────────────────────────────────────
     title        = models.CharField(max_length=500, verbose_name='Sarlavha')
@@ -92,6 +95,7 @@ class Article(BaseModel):
 
     image = models.ImageField(
         upload_to='articles/images/%Y/%m/', null=True, blank=True,
+        validators=[validate_image],
         verbose_name='Maqola rasmi (muallif yuborgan)'
     )
 
@@ -103,6 +107,7 @@ class Article(BaseModel):
     source_file = models.FileField(
         upload_to='articles/sources/%Y/%m/',
         blank=True, null=True,
+        validators=[validate_document],
         verbose_name='Manba fayl (.docx yoki .pdf)',
         help_text='Faylni saqlashda tarkib (HTML) avtomatik parse qilinadi.'
     )
@@ -130,7 +135,6 @@ class Article(BaseModel):
         verbose_name='Local LLM document ID'
     )
 
-    status      = models.CharField(max_length=10, choices=STATUS_CHOICES, default='open', verbose_name='Holat')
     year        = models.PositiveIntegerField(verbose_name='Yil', default=2026)
     quarter     = models.PositiveSmallIntegerField(default=1, verbose_name='Chorak (1–4)')
     pages       = models.PositiveIntegerField(default=0, verbose_name='Sahifalar soni')
@@ -253,10 +257,12 @@ class ArticleSubmission(BaseModel):
     references  = models.TextField(blank=True, verbose_name='Adabiyotlar (references)')
     image       = models.ImageField(
         upload_to='submissions/images/%Y/%m/', null=True, blank=True,
+        validators=[validate_image],
         verbose_name='Maqola rasmi'
     )
     source_file = models.FileField(
         upload_to='submissions/%Y/%m/', null=True, blank=True,
+        validators=[validate_document],
         verbose_name='Yuborilgan fayl'
     )
     note        = models.TextField(blank=True, verbose_name="Muallif izohi")
@@ -333,10 +339,12 @@ class ParsedArticle(BaseModel):
 
     article_pdf = models.FileField(
         upload_to='parsed/%Y/%m/', null=True, blank=True,
+        validators=[validate_document],
         verbose_name='Ajratilgan maqola PDF'
     )
     photo       = models.ImageField(
         upload_to='parsed/photos/%Y/%m/', null=True, blank=True,
+        validators=[validate_image],
         verbose_name='Muallif rasmi'
     )
 

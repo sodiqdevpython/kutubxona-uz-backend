@@ -271,3 +271,63 @@ def extract_metadata_from_file(file_field, filename: str | None = None) -> dict:
         'references': answers['references'],
         'error':      None,
     }
+
+# ── Salomatlik tekshiruvi ────────────────────────────────────────────────────
+# Local LLM ko'pincha vaqtincha o'chirilgan bo'ladi. Har bir tugma bosilishida
+# 60 sekundlik timeout kutmaslik uchun holat Redis'da 60 s keshlanadi.
+
+HEALTH_CACHE_KEY = 'local_llm:health'
+HEALTH_CACHE_TTL = 60
+HEALTH_TIMEOUT   = (3, 5)
+
+
+def health(force: bool = False) -> dict:
+    """
+    Local LLM mavjudmi?  →  {'available': bool, 'reason': str, 'base_url': str}
+
+    `reason` frontendga ko'rsatiladigan qisqa sabab:
+      not_configured — LOCAL_LLM_BASE_URL bo'sh
+      unreachable    — server javob bermadi (o'chiq / tarmoq)
+      http_<kod>     — server xato kod qaytardi
+    """
+    from django.core.cache import cache
+
+    base = _base()
+    if not base:
+        return {'available': False, 'reason': 'not_configured', 'base_url': ''}
+
+    if not force:
+        cached = cache.get(HEALTH_CACHE_KEY)
+        if cached is not None:
+            return cached
+
+    result = {'available': False, 'reason': 'unreachable', 'base_url': base}
+    try:
+        resp = requests.get(f'{base}/api/v1/documents/', timeout=HEALTH_TIMEOUT)
+        if resp.status_code < 500:
+            # 2xx/3xx/4xx — server tirik (401/404 ham "ishlayapti" degani)
+            result = {'available': True, 'reason': 'ok', 'base_url': base}
+        else:
+            result = {'available': False, 'reason': f'http_{resp.status_code}', 'base_url': base}
+    except requests.RequestException:
+        pass
+
+    try:
+        cache.set(HEALTH_CACHE_KEY, result, HEALTH_CACHE_TTL)
+    except Exception:
+        pass
+    return result
+
+
+def is_available() -> bool:
+    return health()['available']
+
+
+def unavailable_payload() -> dict:
+    """AI endpointlari 503 bilan qaytaradigan standart javob."""
+    info = health()
+    return {
+        'error':  'local_ai_unavailable',
+        'detail': "Local AI xizmatiga ulanib bo'lmadi.",
+        'reason': info['reason'],
+    }
