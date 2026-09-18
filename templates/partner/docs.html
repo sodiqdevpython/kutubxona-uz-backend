@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <title>Partner API · Kutubxona.uz</title>
 <style>
-  :root { --accent:#F08418; --ink:#2B2B2B; --ink-2:#5A564F; --ink-3:#8B857B; --line:#E5E0D7; --page:#F2EEE8; --ok:#2F6B4F; }
+  :root { --accent:#F08418; --ink:#2B2B2B; --ink-2:#5A564F; --ink-3:#8B857B; --line:#E5E0D7; --page:#F2EEE8; --ok:#2F6B4F; --bad:#b3261e; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--page); color:var(--ink); font:14px/1.55 -apple-system, "Segoe UI", Roboto, sans-serif; }
   .top { background:#fff; border-bottom:1px solid var(--line); padding:14px 24px; display:flex; align-items:center; gap:18px; flex-wrap:wrap; }
@@ -15,25 +15,43 @@
   .who { color:var(--ink-2); font-size:13px; }
   .top form { margin-left:auto; }
   .top button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:7px 12px; font:inherit; cursor:pointer; }
-  .wrap { max-width:880px; margin:0 auto; padding:24px; }
+  .wrap { max-width:900px; margin:0 auto; padding:24px; }
   .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin-bottom:16px; }
-  .card h2 { font-size:15px; margin:0 0 12px; display:flex; align-items:center; gap:10px; }
+  .card h2 { font-size:15px; margin:0 0 12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .num { display:inline-flex; width:24px; height:24px; border-radius:50%; background:var(--ink); color:#fff; font-size:12px; align-items:center; justify-content:center; flex-shrink:0; }
   .method { font-family:ui-monospace, Menlo, monospace; font-size:11px; font-weight:700; padding:2px 7px; border-radius:6px; color:#fff; background:#3b82f6; }
   .method.post { background:#16a34a; }
-  .row { display:flex; gap:8px; align-items:center; margin:6px 0; }
+  .row { display:flex; gap:8px; align-items:center; margin:6px 0; flex-wrap:wrap; }
   .row label { width:64px; color:var(--ink-3); font-size:12px; flex-shrink:0; }
-  .url, textarea { flex:1; width:100%; font-family:ui-monospace, Menlo, monospace; font-size:12.5px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:#fafaf8; color:var(--ink); }
-  textarea { display:block; resize:vertical; word-break:break-all; }
+  .url, textarea, input.id { flex:1; min-width:200px; font-family:ui-monospace, Menlo, monospace; font-size:12.5px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:#fafaf8; color:var(--ink); }
+  input.id { background:#fff; }
+  input.id:focus { outline:none; border-color:var(--accent); }
+  textarea { display:block; width:100%; resize:vertical; word-break:break-all; }
   .cp { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 10px; font:inherit; font-size:12px; cursor:pointer; white-space:nowrap; }
   .cp:hover { border-color:var(--accent); color:var(--accent); }
+  .try { border:0; background:var(--accent); color:#fff; border-radius:8px; padding:7px 14px; font:inherit; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; }
+  .try:hover { filter:brightness(.95); }
+  .try:disabled { opacity:.5; cursor:default; }
+  .try.ghost { background:#fff; color:var(--ink); border:1px solid var(--line); font-weight:500; }
   .meta { font-size:12.5px; color:var(--ink-2); margin:8px 0 0; }
-  .meta code, p code { font-family:ui-monospace, Menlo, monospace; font-size:12px; background:#f3efe8; padding:1px 5px; border-radius:4px; }
+  .meta code, p code, summary code { font-family:ui-monospace, Menlo, monospace; font-size:12px; background:#f3efe8; padding:1px 5px; border-radius:4px; }
   pre { background:#0f172a; color:#e2e8f0; border-radius:10px; padding:12px 14px; font-size:12px; line-height:1.5; margin:10px 0 0; white-space:pre-wrap; word-break:break-all; }
   pre .c { color:#94a3b8; }
   .lbl { font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); margin:14px 0 4px; font-weight:600; }
-  .ok { color:var(--ok); }
   .tokens { border-color:#f0c9a0; background:#fffaf4; }
+  details { margin-top:12px; }
+  summary { cursor:pointer; font-size:13px; color:var(--ink-2); }
+  .out { display:none; margin-top:12px; }
+  .out.on { display:block; }
+  .status { font-family:ui-monospace, Menlo, monospace; font-size:12px; margin:0 0 -4px; }
+  .status.ok { color:var(--ok); } .status.bad { color:var(--bad); }
+  .res-list { list-style:none; margin:10px 0 0; padding:0; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .res-list li { display:flex; gap:12px; align-items:center; padding:8px 12px; border-bottom:1px solid var(--line); font-size:13px; }
+  .res-list li:last-child { border-bottom:0; }
+  .res-list .t { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .res-list .d { color:var(--ink-3); font-family:ui-monospace, Menlo, monospace; font-size:11.5px; }
+  .res-list button { border:1px solid var(--line); background:#fff; border-radius:6px; padding:4px 9px; font:inherit; font-size:12px; cursor:pointer; }
+  .res-list button:hover { border-color:var(--accent); color:var(--accent); }
 </style>
 </head>
 <body>
@@ -47,7 +65,7 @@
 
   <!-- Tokenlar -->
   <div class="card tokens">
-    <h2>Sizning tokenlaringiz <span class="meta" style="margin:0; font-weight:400">— hozirgina berildi; sahifani yangilasangiz yangisi chiqadi</span></h2>
+    <h2>Sizning tokenlaringiz <span class="meta" style="margin:0; font-weight:400">— hozirgina berildi; pastdagi «Sinab ko'rish» tugmalari shu tokenlar bilan ishlaydi</span></h2>
     <div class="row"><label>access</label><textarea id="acc" rows="2" readonly>{{ tokens.access }}</textarea><button class="cp" onclick="cp('acc',this)">Nusxa</button></div>
     <div class="row"><label>refresh</label><textarea id="ref" rows="2" readonly>{{ tokens.refresh }}</textarea><button class="cp" onclick="cp('ref',this)">Nusxa</button></div>
     <p class="meta">
@@ -60,47 +78,171 @@
   <!-- 1. Ro'yxat -->
   <div class="card">
     <h2><span class="num">1</span> Maqolalar ro'yxati <span class="method">GET</span></h2>
-    <div class="row"><input class="url" id="u1" readonly value="{{ list_url }}"><button class="cp" onclick="cp('u1',this)">Nusxa</button></div>
+    <div class="row">
+      <input class="url" id="u1" readonly value="{{ list_url }}">
+      <button class="cp" onclick="cp('u1',this)">Nusxa</button>
+      <button class="try" onclick="tryList(1)">Sinab ko'rish</button>
+    </div>
     <p class="meta">Eng yangisidan eskisiga, 50 tadan. Keyingi sahifa: <code>?page=2</code> (javobdagi <code>next</code>).</p>
-    <div class="lbl">So'rov</div>
+    <div class="out" id="out1">
+      <p class="status" id="st1"></p>
+      <ul class="res-list" id="list1"></ul>
+      <div class="row" id="pager1" style="margin-top:8px"></div>
+      <details><summary>To'liq JSON javob</summary><pre id="pre1"></pre></details>
+    </div>
+    <details>
+      <summary>curl va javob namunasi</summary>
 <pre>curl "{{ list_url }}" \
   -H "Authorization: Bearer &lt;access&gt;"</pre>
-    <div class="lbl">Javob</div>
 <pre>{{ list_example }}</pre>
+    </details>
   </div>
 
   <!-- 2. Maqola -->
   <div class="card">
     <h2><span class="num">2</span> Bitta maqola va fayli <span class="method">GET</span></h2>
-    <div class="row"><input class="url" id="u2" readonly value="{{ detail_url }}"><button class="cp" onclick="cp('u2',this)">Nusxa</button></div>
+    <div class="row">
+      <input class="url" id="u2" readonly value="{{ detail_url }}">
+      <button class="cp" onclick="cp('u2',this)">Nusxa</button>
+    </div>
+    <div class="row">
+      <label>id</label>
+      <input class="id" id="did" value="{{ sample_id }}" placeholder="maqola id (ro'yxatdan)">
+      <button class="try" onclick="tryDetail()">Sinab ko'rish</button>
+      <button class="try ghost" id="dl" onclick="tryFile()" disabled>Faylni yuklab olish</button>
+    </div>
     <p class="meta"><code>&lt;id&gt;</code> — ro'yxatdagi <code>id</code>. Javobdagi <code>file_url</code> — faylning <b>to'liq, tayyor manzili</b>: o'sha token bilan to'g'ridan-to'g'ri yuklab olinadi.</p>
-    <div class="lbl">So'rov</div>
+    <div class="out" id="out2">
+      <p class="status" id="st2"></p>
+      <pre id="pre2"></pre>
+    </div>
+    <details>
+      <summary>curl va javob namunasi</summary>
 <pre>curl "{{ detail_sample_url }}" \
   -H "Authorization: Bearer &lt;access&gt;"</pre>
-    <div class="lbl">Javob</div>
 {% if detail_example %}<pre>{{ detail_example }}</pre>{% else %}<pre><span class="c">// hozircha fayli bor chop etilgan maqola yo'q</span></pre>{% endif %}
-    <div class="lbl">Faylni yuklab olish</div>
-<pre>curl "&lt;file_url&gt;" \
+<pre><span class="c"># faylni yuklab olish</span>
+curl "&lt;file_url&gt;" \
   -H "Authorization: Bearer &lt;access&gt;" -o maqola.pdf</pre>
+    </details>
   </div>
 
   <!-- 3. Access yangilash -->
   <div class="card">
     <h2><span class="num">3</span> Access tokenni yangilash <span class="method post">POST</span></h2>
-    <div class="row"><input class="url" id="u3" readonly value="{{ refresh_url }}"><button class="cp" onclick="cp('u3',this)">Nusxa</button></div>
-    <p class="meta">Access tugaganda (<code>401</code>) — refresh tokenni yuboring, yangi access (va yangi refresh) qaytadi.</p>
-    <div class="lbl">So'rov</div>
+    <div class="row">
+      <input class="url" id="u3" readonly value="{{ refresh_url }}">
+      <button class="cp" onclick="cp('u3',this)">Nusxa</button>
+      <button class="try" onclick="tryRefresh()">Sinab ko'rish</button>
+    </div>
+    <p class="meta">Access tugaganda (<code>401</code>) — refresh tokenni yuboring, yangi access (va yangi refresh) qaytadi. Sinab ko'rsangiz yuqoridagi tokenlar ham yangilanadi.</p>
+    <div class="out" id="out3">
+      <p class="status" id="st3"></p>
+      <pre id="pre3"></pre>
+    </div>
+    <details>
+      <summary>curl va javob namunasi</summary>
 <pre>curl -X POST "{{ refresh_url }}" \
   -H "Content-Type: application/json" \
   -d '{"refresh": "&lt;refresh&gt;"}'</pre>
-    <div class="lbl">Javob</div>
 <pre>{{ refresh_example }}</pre>
+    </details>
   </div>
 
   <p class="meta" style="text-align:center">Chegara: soatiga 1000 so'rov. Savol bo'lsa — Kutubxona.uz tahririyati.</p>
 </div>
 
 <script>
+  var LIST_URL    = "{{ list_url|escapejs }}";
+  var API_BASE    = "{{ api_base|escapejs }}";
+  var REFRESH_URL = "{{ refresh_url|escapejs }}";
+  var lastFile    = null;   // {url, name}
+
+  function access()  { return document.getElementById('acc').value.trim(); }
+  function refresh() { return document.getElementById('ref').value.trim(); }
+  function auth()    { return { 'Authorization': 'Bearer ' + access() }; }
+
+  function show(n, status, ms, data) {
+    var out = document.getElementById('out' + n); out.classList.add('on');
+    var st = document.getElementById('st' + n);
+    st.textContent = 'HTTP ' + status + ' · ' + ms + ' ms' + (status === 401 ? '  — access tugagan, 3-endpoint bilan yangilang' : '');
+    st.className = 'status ' + (status >= 200 && status < 300 ? 'ok' : 'bad');
+    document.getElementById('pre' + n).textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+  }
+
+  async function call(n, url, opts) {
+    var t0 = performance.now();
+    try {
+      var r = await fetch(url, opts);
+      var ms = Math.round(performance.now() - t0);
+      var ct = r.headers.get('content-type') || '';
+      var data = ct.indexOf('json') >= 0 ? await r.json() : await r.text();
+      show(n, r.status, ms, data);
+      return { status: r.status, data: data };
+    } catch (e) {
+      show(n, 0, Math.round(performance.now() - t0), 'Xato: ' + e.message);
+      return { status: 0, data: null };
+    }
+  }
+
+  // 1) ro'yxat
+  async function tryList(page) {
+    var url = LIST_URL + (page > 1 ? '?page=' + page : '');
+    var r = await call(1, url, { headers: auth() });
+    var ul = document.getElementById('list1'); ul.innerHTML = '';
+    var pg = document.getElementById('pager1'); pg.innerHTML = '';
+    if (r.status !== 200 || !r.data || !r.data.results) return;
+    r.data.results.forEach(function (a) {
+      var li = document.createElement('li');
+      li.innerHTML = '<span class="t"></span><span class="d"></span><button>Maqolani ochish</button>';
+      li.querySelector('.t').textContent = a.title;
+      li.querySelector('.d').textContent = a.published_at || '';
+      li.querySelector('button').onclick = function () {
+        document.getElementById('did').value = a.id;
+        tryDetail();
+        document.getElementById('out2').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      };
+      ul.appendChild(li);
+    });
+    if (r.data.previous) { var b1 = document.createElement('button'); b1.className = 'try ghost'; b1.textContent = '← Oldingi'; b1.onclick = function () { tryList(page - 1); }; pg.appendChild(b1); }
+    if (r.data.next)     { var b2 = document.createElement('button'); b2.className = 'try ghost'; b2.textContent = 'Keyingi →'; b2.onclick = function () { tryList(page + 1); }; pg.appendChild(b2); }
+    var m = document.createElement('span'); m.className = 'meta'; m.style.margin = '0'; m.textContent = 'jami ' + r.data.count + ' ta · sahifa ' + page; pg.appendChild(m);
+  }
+
+  // 2) maqola + fayl
+  async function tryDetail() {
+    var id = document.getElementById('did').value.trim();
+    if (!id) return;
+    var r = await call(2, API_BASE + '/api/partner/articles/' + encodeURIComponent(id) + '/', { headers: auth() });
+    var dl = document.getElementById('dl');
+    if (r.status === 200 && r.data && r.data.file_url) { lastFile = { url: r.data.file_url, name: r.data.file_name || 'maqola' }; dl.disabled = false; }
+    else { lastFile = null; dl.disabled = true; }
+  }
+  async function tryFile() {
+    if (!lastFile) return;
+    var dl = document.getElementById('dl'); dl.disabled = true; dl.textContent = 'Yuklanmoqda…';
+    try {
+      var r = await fetch(lastFile.url, { headers: auth() });
+      if (!r.ok) { show(2, r.status, 0, 'Fayl olinmadi'); return; }
+      var blob = await r.blob();
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = lastFile.name; document.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+    } finally { dl.disabled = false; dl.textContent = 'Faylni yuklab olish'; }
+  }
+
+  // 3) yangilash — sahifadagi tokenlar ham almashadi
+  async function tryRefresh() {
+    var r = await call(3, REFRESH_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh: refresh() })
+    });
+    if (r.status === 200 && r.data && r.data.access) {
+      document.getElementById('acc').value = r.data.access;
+      document.getElementById('ref').value = r.data.refresh;
+    }
+  }
+
   function cp(id, btn) {
     var el = document.getElementById(id);
     el.select(); el.setSelectionRange(0, 999999);
