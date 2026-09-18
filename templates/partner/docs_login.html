@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Partner API — kirish · Kutubxona.uz</title>
+<style>
+  :root { --accent:#F08418; --ink:#2B2B2B; --ink-2:#5A564F; --ink-3:#8B857B; --line:#E5E0D7; --page:#F2EEE8; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         background:var(--page); color:var(--ink); font:14px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; padding:24px; }
+  .card { width:100%; max-width:420px; background:#fff; border:1px solid var(--line); border-radius:12px; padding:28px; }
+  .brand { font-weight:800; letter-spacing:-.02em; font-size:18px; }
+  .brand b { color:var(--accent); }
+  h1 { font-size:20px; margin:16px 0 4px; }
+  p { color:var(--ink-2); margin:0 0 18px; }
+  label { display:block; font-size:12px; color:var(--ink-3); margin:12px 0 4px; }
+  input { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; font-family:ui-monospace, Menlo, monospace; font-size:13px; }
+  input:focus { outline:none; border-color:var(--accent); }
+  button { width:100%; margin-top:18px; padding:11px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
+  .err { background:#fdecea; border:1px solid #f5c2c0; color:#9b1c1c; border-radius:8px; padding:10px 12px; margin-top:14px; font-size:13px; }
+  .foot { margin-top:18px; font-size:12px; color:var(--ink-3); }
+  code { font-family:ui-monospace, Menlo, monospace; font-size:12px; }
+</style>
+</head>
+<body>
+  <form class="card" method="post" autocomplete="off">
+    {% csrf_token %}
+    <div class="brand">Kutubxona<b>.UZ</b></div>
+    <h1>Partner API — hujjat</h1>
+    <p>Sizga berilgan <code>client_id</code> va <code>client_secret</code> bilan kiring.</p>
+
+    <label for="cid">client_id (login)</label>
+    <input id="cid" name="client_id" value="{{ client_id|default:'' }}" required autofocus>
+
+    <label for="sec">client_secret (parol)</label>
+    <input id="sec" name="client_secret" type="password" required>
+
+    {% if error %}<div class="err">{{ error }}</div>{% endif %}
+
+    <button type="submit">Kirish</button>
+
+    <div class="foot">
+      Kirgach: faqat hamkor endpointlari hujjati, tayyor access/refresh tokenlar va
+      «Try it out». Kalitlaringiz yo'qolgan bo'lsa — Kutubxona.uz tahririyatiga yozing.
+    </div>
+  </form>
+</body>
+</html>

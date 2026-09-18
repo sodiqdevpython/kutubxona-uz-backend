@@ -15,101 +15,154 @@
 <style>
   .kb-card      { background:#fff; border:1px solid #e0e0e0; border-radius:8px;
                   padding:18px 20px; margin-bottom:18px; }
-  .kb-card h2   { margin:0 0 10px; font-size:15px; }
+  .kb-card h2   { margin:0 0 12px; font-size:15px; display:flex; align-items:center; gap:10px; }
+  .kb-num       { display:inline-flex; width:24px; height:24px; border-radius:50%; background:#0f172a;
+                  color:#fff; font-size:12px; align-items:center; justify-content:center; }
+  .kb-row       { display:flex; gap:8px; align-items:center; margin:6px 0; }
+  .kb-row label { width:90px; font-size:12px; color:#666; flex-shrink:0; }
+  .kb-url       { flex:1; font-family:monospace; font-size:12.5px; padding:8px 10px; border:1px solid #d0d0d0;
+                  border-radius:6px; background:#fafafa; }
   .kb-token     { display:block; width:100%; box-sizing:border-box; font-family:monospace;
                   font-size:12px; padding:10px; border:1px solid #d0d0d0; border-radius:6px;
                   background:#fafafa; word-break:break-all; resize:vertical; }
-  .kb-label     { font-weight:600; font-size:12px; color:#444; margin:14px 0 5px; display:block; }
   .kb-meta      { font-size:12px; color:#666; }
   .kb-copy      { margin-top:6px; }
   .kb-warn      { background:#fff8e1; border:1px solid #ffe082; border-radius:6px;
                   padding:12px 14px; font-size:13px; margin-bottom:18px; }
-  .kb-pre       { background:#0f172a; color:#e2e8f0; padding:14px; border-radius:6px;
-                  font-size:12px; overflow-x:auto; line-height:1.5; }
-  .kb-pre .k    { color:#7dd3fc; }
-  table.kb-t    { width:100%; border-collapse:collapse; font-size:13px; }
-  table.kb-t td { padding:6px 0; border-bottom:1px solid #f0f0f0; }
-  table.kb-t td:first-child { color:#666; width:190px; }
+  .kb-head      { display:flex; justify-content:space-between; align-items:baseline; gap:20px; flex-wrap:wrap; }
 </style>
 
-<h1>{{ client.name }} — API tokenlari</h1>
-
-<div class="kb-card">
-  <h2>Mijoz</h2>
-  <table class="kb-t">
-    <tr><td>Nomi</td><td>{{ client.name }}</td></tr>
-    <tr><td>client_id</td><td><code>{{ client.client_id }}</code></td></tr>
-    <tr><td>Holati</td><td>{% if client.is_active %}✅ Faol{% else %}⛔ O'chirilgan{% endif %}</td></tr>
-    <tr><td>Aloqa</td><td>{{ client.contact|default:"—" }}</td></tr>
-    <tr><td>So'rovlar soni</td><td>{{ client.request_count }}</td></tr>
-    <tr><td>Oxirgi murojaat</td><td>{{ client.last_used_at|default:"—" }}</td></tr>
-    <tr><td>API manzili</td><td><code>{{ api_base }}</code></td></tr>
-    <tr><td>Token versiyasi</td><td>{{ client.token_version }}</td></tr>
-  </table>
+<div class="kb-head">
+  <h1 style="margin:0 0 14px">{{ client.name }} — hamkorga beriladigan 3 ta narsa</h1>
+  <span class="kb-meta">
+    {% if client.is_active %}✅ Faol{% else %}⛔ O'chirilgan{% endif %}
+    · so'rovlar: {{ client.request_count }}
+    · oxirgi: {{ client.last_used_at|default:"—" }}
+  </span>
 </div>
 
 {% if tokens %}
+
 <div class="kb-warn">
-  <strong>Bu tokenlarni hoziroq nusxalab oling.</strong> Sahifa yangilanganda ular
-  qaytadan ko'rsatilmaydi (yangisini generatsiya qilish mumkin, eskisi baribir amal qiladi).
+  Quyidagilarni nusxalab hamkorga yuboring. Sahifa har ochilganda <strong>yangi</strong>
+  token juftligi beriladi; oldin berilganlari muddati tugaguncha ishlayveradi.
 </div>
 
-<div class="kb-card">
-  <h2>Hamkorga beriladigan tokenlar</h2>
+<!-- 0 · Hujjat sahifasi — login/parol -->
+<div class="kb-card" style="border-color:#f0a050">
+  <h2><span class="kb-num" style="background:#F08418">★</span> Hamkor hujjati (Swagger) — login / parol</h2>
+  <div class="kb-row">
+    <label>Sahifa</label>
+    <input class="kb-url" id="u0" readonly value="{{ docs_url }}">
+    <button type="button" class="button" onclick="kbCopy('u0', this)">Nusxalash</button>
+  </div>
+  <div class="kb-row">
+    <label>Login</label>
+    <input class="kb-url" id="cid" readonly value="{{ client.client_id }}">
+    <button type="button" class="button" onclick="kbCopy('cid', this)">Nusxalash</button>
+  </div>
+  <div class="kb-row">
+    <label>Parol</label>
+    {% if new_secret %}
+      <input class="kb-url" id="sec" readonly value="{{ new_secret }}">
+      <button type="button" class="button" onclick="kbCopy('sec', this)">Nusxalash</button>
+    {% else %}
+      <span class="kb-meta" style="flex:1">avval berilgan (qayta ko'rsatilmaydi)</span>
+      <form method="post" style="margin:0" onsubmit="return confirm('Yangi parol beriladi — eski client_secret ishlamay qoladi. Davom etilsinmi?')">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="rotate">
+        <button type="submit" class="button">Yangi parol berish</button>
+      </form>
+    {% endif %}
+  </div>
+  {% if new_secret %}
+  <p class="kb-meta" style="margin:8px 0 0; color:#b3261e"><strong>Parol faqat hozir ko'rinadi</strong> — nusxalab oling.</p>
+  {% endif %}
+  <p class="kb-meta" style="margin:10px 0 0">
+    Hamkor shu login/parol bilan sahifaga kiradi: faqat o'z endpointlari hujjati, tayyor
+    access/refresh va «Try it out». Tokenlari tugasa — o'zi qayta kirib oladi, sizga yozmaydi.
+  </p>
+</div>
 
-  <label class="kb-label" for="acc">Access token — {{ tokens.access_expires_in }} soniya (≈1 soat)</label>
+<!-- 1 · Endpointlar -->
+<div class="kb-card">
+  <h2><span class="kb-num">1</span> Endpoint manzillari (faqat GET)</h2>
+  <div class="kb-row">
+    <label>Ro'yxat</label>
+    <input class="kb-url" id="u1" readonly value="{{ list_url }}">
+    <button type="button" class="button" onclick="kbCopy('u1', this)">Nusxalash</button>
+  </div>
+  <div class="kb-row">
+    <label>Maqola</label>
+    <input class="kb-url" id="u2" readonly value="{{ detail_url }}">
+    <button type="button" class="button" onclick="kbCopy('u2', this)">Nusxalash</button>
+  </div>
+  <div class="kb-row">
+    <label>Fayl (PDF)</label>
+    <input class="kb-url" id="u3" readonly value="{{ file_url }}">
+    <button type="button" class="button" onclick="kbCopy('u3', this)">Nusxalash</button>
+  </div>
+  <p class="kb-meta" style="margin:10px 0 0">
+    Har so'rovga sarlavha: <code>Authorization: Bearer &lt;access&gt;</code>.
+    Ro'yxat: <code>?page=1&amp;page_size=50</code>, faqat yangilari: <code>?since=YYYY-MM-DD</code>.
+    Chegara: soatiga 1000 so'rov.
+  </p>
+</div>
+
+<!-- 2 · Access -->
+<div class="kb-card">
+  <h2><span class="kb-num">2</span> Access token <span class="kb-meta">— {{ access_hours }} soat amal qiladi</span></h2>
   <textarea class="kb-token" id="acc" rows="4" readonly>{{ tokens.access }}</textarea>
   <button type="button" class="button kb-copy" onclick="kbCopy('acc', this)">Nusxalash</button>
+</div>
 
-  <label class="kb-label" for="ref">Refresh token — {{ tokens.refresh_expires_in }} soniya (≈30 kun)</label>
+<!-- 3 · Refresh -->
+<div class="kb-card">
+  <h2><span class="kb-num">3</span> Refresh token <span class="kb-meta">— {{ refresh_days }} kun; access tugaganda yangisini beradi</span></h2>
   <textarea class="kb-token" id="ref" rows="4" readonly>{{ tokens.refresh }}</textarea>
   <button type="button" class="button kb-copy" onclick="kbCopy('ref', this)">Nusxalash</button>
-
-  <label class="kb-label" for="all">Hammasi birga (hamkorga yuborish uchun)</label>
-  <textarea class="kb-token" id="all" rows="9" readonly>Kutubxona.uz — Partner API
-Base URL: {{ api_base }}
-Hujjat:   {{ api_base }}/api/partner/
-
-client_id: {{ client.client_id }}
-
-access:  {{ tokens.access }}
-refresh: {{ tokens.refresh }}
-
-Access token ~1 soat amal qiladi. Muddati tugasa:
-POST {{ api_base }}/api/partner/auth/refresh/  {"refresh": "&lt;refresh&gt;"}</textarea>
-  <button type="button" class="button kb-copy" onclick="kbCopy('all', this)">Nusxalash</button>
+  <p class="kb-meta" style="margin:10px 0 0">
+    <code>POST {{ refresh_url }}</code> &nbsp; body: <code>{"refresh": "&lt;refresh&gt;"}</code>
+    → yangi access + refresh qaytadi (eski refresh ham o'z muddatigacha ishlaydi).
+  </p>
 </div>
+
+<!-- Hammasi birga -->
+<div class="kb-card" style="border-color:#0f172a">
+  <h2>Hammasi birga — hamkorga yuborish uchun</h2>
+  <textarea class="kb-token" id="all" rows="20" readonly>Kutubxona.uz — Partner API
+
+HUJJAT VA SINOV (Swagger):
+  {{ docs_url }}
+  login:  {{ client.client_id }}
+  parol:  {% if new_secret %}{{ new_secret }}{% else %}<avval berilgan client_secret>{% endif %}
+
+ENDPOINTLAR (faqat GET):
+  Ro'yxat:   {{ list_url }}?page=1&page_size=50
+  Maqola:    {{ detail_url }}
+  Fayl:      {{ file_url }}
+  Sarlavha:  Authorization: Bearer <access>
+
+ACCESS TOKEN ({{ access_hours }} soat):
+{{ tokens.access }}
+
+REFRESH TOKEN ({{ refresh_days }} kun):
+{{ tokens.refresh }}
+
+Access tugaganda yangilash:
+  POST {{ refresh_url }}
+  {"refresh": "<refresh>"}   →  {"access": "...", "refresh": "..."}</textarea>
+  <button type="button" class="button kb-copy default" onclick="kbCopy('all', this)">Hammasini nusxalash</button>
+</div>
+
 {% endif %}
 
 <div class="kb-card">
-  <h2>Yangi token juftligi berish</h2>
-  <p class="kb-meta">
-    Hamkor <code>client_id</code> + <code>client_secret</code> bilan tokenni o'zi ham
-    ola oladi. Bu tugma — secret ulashmasdan, tayyor tokenni berish uchun.
-    Eski tokenlar bekor qilinmaydi; ular muddati tugaguncha ishlaydi.
-  </p>
-  <form method="post" style="margin-top:12px">
+  <form method="post" style="display:inline">
     {% csrf_token %}
-    <button type="submit" class="default"{% if not client.is_active %} disabled{% endif %}>
-      Yangi access + refresh generatsiya qilish
-    </button>
-    {% if not client.is_active %}
-      <span class="kb-meta" style="margin-left:10px">Mijoz o'chirilgan — avval faollashtiring.</span>
-    {% endif %}
+    <button type="submit" class="button"{% if not client.is_active %} disabled{% endif %}>Yangi tokenlar berish</button>
   </form>
-</div>
-
-<div class="kb-card" style="border-color:#f3c6c2">
-  <h2>Tokenlarni bekor qilish</h2>
-  <p class="kb-meta">
-    Token o'g'irlangan yoki hamkor bilan hamkorlik tugagan bo'lsa — shu tugma
-    <strong>berilgan barcha access va refresh tokenlarni</strong> bir zumda
-    yaroqsiz qiladi. Mijoz o'chirilmaydi: keyin yangi token berish mumkin.
-    <code>client_id</code> va <code>client_secret</code> o'zgarmaydi —
-    ular ham almashishi kerak bo'lsa, «Yangi client_secret generatsiya qilish»
-    amalidan foydalaning.
-  </p>
-  <form method="post" style="margin-top:12px"
+  <form method="post" style="display:inline; margin-left:10px"
         onsubmit="return confirm('Barcha tokenlar bekor qilinsinmi? Hamkorning integratsiyasi to‘xtaydi.')">
     {% csrf_token %}
     <input type="hidden" name="action" value="revoke">
@@ -118,28 +171,17 @@ POST {{ api_base }}/api/partner/auth/refresh/  {"refresh": "&lt;refresh&gt;"}</t
       Barcha tokenlarni bekor qilish
     </button>
   </form>
-</div>
-
-<div class="kb-card">
-  <h2>Hamkor nima qila oladi</h2>
-  <p class="kb-meta" style="margin-bottom:10px">
-    Faqat <strong>GET</strong>. Faqat saytda chop etilgan (jurnal soniga kiritilgan)
-    va fayli mavjud maqolalar. Soatiga 1000 ta so'rov.
+  <p class="kb-meta" style="margin:12px 0 0">
+    «Bekor qilish» — shu paytgacha berilgan <strong>barcha</strong> access va refresh tokenlar
+    bir zumda yaroqsiz bo'ladi; keyin yana yangisini berish mumkin.
   </p>
-  <pre class="kb-pre"># 1) Maqolalar ro'yxati (yangidan eskiga)
-curl -H "Authorization: Bearer &lt;access&gt;" \
-     "{{ api_base }}/api/partner/articles/?page_size=50"
-
-# 2) Bitta maqola
-curl -H "Authorization: Bearer &lt;access&gt;" \
-     "{{ api_base }}/api/partner/articles/&lt;slug&gt;/"
-
-# 3) Maqola fayli (PDF / DOCX)
-curl -H "Authorization: Bearer &lt;access&gt;" -OJ \
-     "{{ api_base }}/api/partner/articles/&lt;slug&gt;/file/"</pre>
 </div>
 
-<p><a href="{% url 'admin:partner_partnerclient_changelist' %}">&larr; Mijozlar ro'yxatiga qaytish</a></p>
+<p>
+  <a href="{% url 'admin:partner_partnerclient_changelist' %}">&larr; Mijozlar ro'yxati</a>
+  &nbsp;·&nbsp;
+  <a href="{% url 'admin:partner_partnerclient_change' client.pk %}">Mijozni tahrirlash</a>
+</p>
 
 <script>
 function kbCopy(id, btn) {

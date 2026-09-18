@@ -1,8 +1,14 @@
 from django.urls import path
 
-from . import views
+from . import docs, views
 
 urlpatterns = [
+    # Hamkorlar uchun hujjat (Swagger) — client_id/client_secret bilan kiriladi
+    path('docs/',        docs.PartnerDocsView.as_view(),       name='partner-docs'),
+    path('docs/login/',  docs.PartnerDocsLoginView.as_view(),  name='partner-docs-login'),
+    path('docs/logout/', docs.PartnerDocsLogoutView.as_view(), name='partner-docs-logout'),
+    path('docs/schema/', docs.PartnerSchemaView.as_view(),     name='partner-schema'),
+
     # Autentifikatsiya
     path('auth/token/',   views.PartnerTokenView.as_view(),        name='partner-token'),
     path('auth/refresh/', views.PartnerTokenRefreshView.as_view(), name='partner-token-refresh'),
