@@ -24,7 +24,8 @@ class AuthorBriefSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = Author
-        fields = ('id', 'name', 'slug', 'initials', 'avatar_idx', 'avatar_url')
+        fields = ('id', 'name', 'slug', 'initials', 'avatar_idx', 'avatar_url',
+                  'org', 'role')
 
     def get_avatar_url(self, obj) -> str | None:
         if not obj.avatar:
