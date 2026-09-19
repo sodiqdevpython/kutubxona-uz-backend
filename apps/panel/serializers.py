@@ -120,9 +120,44 @@ class AdminSubmissionSerializer(serializers.ModelSerializer):
     article_ai_ready = serializers.SerializerMethodField()
     source_file_url  = serializers.SerializerMethodField()
     image_url        = serializers.SerializerMethodField()
+    file_name        = serializers.SerializerMethodField()
+    file_size        = serializers.SerializerMethodField()
+    author           = serializers.SerializerMethodField()
+    article_doi      = serializers.SerializerMethodField()
+    article_pages    = serializers.SerializerMethodField()
 
     def get_article_ai_ready(self, obj) -> bool:
         return bool(obj.article and obj.article.llm_document_id)
+
+    def get_file_name(self, obj):
+        import os
+        return os.path.basename(obj.source_file.name) if obj.source_file else None
+
+    def get_file_size(self, obj):
+        if not obj.source_file:
+            return None
+        try:
+            return obj.source_file.size
+        except (OSError, ValueError):
+            return None
+
+    def get_author(self, obj):
+        a = obj.author
+        if not a:
+            return None
+        return {
+            'id': str(a.id), 'name': a.name, 'slug': a.slug, 'initials': a.initials,
+            'role': a.role, 'org': a.org, 'avatar_idx': a.avatar_idx,
+            'avatar_url': self._abs(a.avatar), 'telegram_username': a.telegram_username,
+        }
+
+    def get_article_doi(self, obj):
+        return obj.article.doi if obj.article else None
+
+    def get_article_pages(self, obj):
+        if obj.article and (obj.article.page_start or obj.article.page_end):
+            return {'start': obj.article.page_start, 'end': obj.article.page_end}
+        return None
 
     def get_author_name(self, obj):
         return obj.author.name if obj.author else (obj.tg_name or 'Noma\'lum')
@@ -171,12 +206,14 @@ class AdminSubmissionSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'chat_id', 'tg_name', 'tg_username',
             'title', 'keywords', 'keywords_list', 'abstract', 'references', 'note',
+            'udk', 'org',
             'extracted_authors', 'authors_list', 'ai_filled',
             'status', 'reject_reason', 'created_at', 'submitted_at',
-            'author_name',
+            'author_name', 'author',
             'article_id', 'article_title', 'article_slug',
             'article_category', 'article_issue', 'article_ai_ready',
-            'source_file_url', 'image_url',
+            'article_doi', 'article_pages',
+            'source_file_url', 'image_url', 'file_name', 'file_size',
         )
 
 

@@ -15,7 +15,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 
 from utils.cache import CachedListMixin, cached_action, NS_CATALOG
-from .models import Category, Article, ArticleSubmission
+from .models import Category, Article, ArticleSubmission, ViewDay
 from .serializers import (
     CategorySerializer,
     ArticleListSerializer,
@@ -102,6 +102,7 @@ class ArticleViewSet(CachedListMixin, viewsets.ReadOnlyModelViewSet):
         # cache.add() True qaytaradi faqat agar kalit yo'q bo'lsa
         if cache.add(key, 1, timeout=86400):  # 24 soat
             article.increment_views()
+            ViewDay.bump()   # admin panel: 30 kunlik statistika
 
     @action(detail=False, url_path='search')
     @cached_action(namespace=NS_CATALOG)

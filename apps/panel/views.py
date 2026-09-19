@@ -127,10 +127,19 @@ class CurrentUserView(APIView):
 
     def get(self, request):
         u = request.user
+        first, last = (u.first_name or '').strip(), (u.last_name or '').strip()
+        full  = f'{first} {last}'.strip() or u.username
+        short = f'{first[0]}. {last}' if first and last else full
+        initials = ''.join(p[0] for p in full.split()[:2]).upper() or u.username[:2].upper()
         return Response({
             'id': u.id, 'username': u.username,
             'email': u.email,
             'is_staff': u.is_staff, 'is_superuser': u.is_superuser,
+            # Admin panel sidebar'i uchun
+            'full_name':  full,
+            'short_name': short,
+            'initials':   initials,
+            'role_label': 'Bosh muharrir' if u.is_superuser else 'Tahririyat',
         })
 
 
@@ -295,12 +304,18 @@ class AdminSubmissionListView(APIView):
 class AdminSubmissionApproveView(APIView):
     """
     POST /api/admin/submissions/<pk>/approve/
-    Body: { category_id?: uuid, category_name?: str }
+    Body: { category_id?: uuid, category_name?: str,
+            issue_id?: uuid, page_start?: int, page_end?: int, udk?: str,
+            notify?: bool (standart true) }
     Maqola yaratadi, keywords ni Keyword jadvaliga ko'chiradi, category belgilaydi.
+    issue_id berilsa darhol songa biriktiradi va DOI yaratadi (Figma: «Tasdiqlash va joylash»).
     """
     permission_classes = [IsStaff]
 
     def post(self, request, pk):
+        from .dashboard import invalidate_dashboard
+        from .doi import attach_to_issue, parse_int
+
         try:
             sub = ArticleSubmission.objects.select_related('author').get(pk=pk)
         except ArticleSubmission.DoesNotExist:
@@ -317,6 +332,17 @@ class AdminSubmissionApproveView(APIView):
             category = Category.objects.filter(pk=cat_id).first()
         elif cat_name:
             category, _ = Category.objects.get_or_create(name=cat_name)
+
+        # ── Jurnal soni / sahifalar / UDK (ixtiyoriy) ─────────────────────────
+        issue = None
+        if request.data.get('issue_id'):
+            issue = Issue.objects.filter(pk=request.data.get('issue_id')).first()
+            if not issue:
+                return Response({'error': 'Jurnal soni topilmadi'}, status=404)
+        page_start = parse_int(request.data.get('page_start'))
+        page_end   = parse_int(request.data.get('page_end'))
+        udk        = (request.data.get('udk') or sub.udk or '').strip()
+        notify     = request.data.get('notify', True) not in (False, 'false', 'False', '0', 0)
 
         # ── Telegram egasi (profil) ───────────────────────────────────────────
         tg_author = sub.author
@@ -374,16 +400,36 @@ class AdminSubmissionApproveView(APIView):
                 sub.article.category = category
                 sub.article.save(update_fields=['category', 'updated_at'])
 
-        sub.status = 'approved'
-        sub.save()
+        # ── Sahifalar, UDK, songa biriktirish + DOI ───────────────────────────
+        article = sub.article
+        changed = []
+        if page_start:
+            article.page_start = page_start; changed.append('page_start')
+        if page_end:
+            article.page_end = page_end; changed.append('page_end')
+        if udk:
+            article.udk = udk; changed.append('udk')
+        if issue:
+            changed += attach_to_issue(article, issue)
+        if changed:
+            article.save(update_fields=list(dict.fromkeys(changed)) + ['updated_at'])
 
-        if sub.chat_id:
-            tg_send(
-                sub.chat_id,
-                "✅ <b>Maqolangiz tasdiqlandi!</b>\n\n"
-                "Tahrir tomonidan ko'rib chiqildi va arxivga qabul qilindi. "
-                "Jurnal soniga kiritilgandan so'ng saytda e'lon qilinadi.",
-            )
+        sub.status = 'approved'
+        if udk:
+            sub.udk = udk
+        sub.save()
+        invalidate_dashboard()
+
+        if sub.chat_id and notify:
+            if issue:
+                AdminIssueAssignArticleView()._notify_author(article, issue)
+            else:
+                tg_send(
+                    sub.chat_id,
+                    "✅ <b>Maqolangiz tasdiqlandi!</b>\n\n"
+                    "Tahrir tomonidan ko'rib chiqildi va arxivga qabul qilindi. "
+                    "Jurnal soniga kiritilgandan so'ng saytda e'lon qilinadi.",
+                )
 
         return Response(AdminSubmissionSerializer(sub, context={'request': request}).data)
 
@@ -444,12 +490,22 @@ class AdminSubmissionAIExtractView(APIView):
 
 class AdminSubmissionUpdateView(APIView):
     """
+    GET    /api/admin/submissions/<pk>/  — bitta topshirish (admin detail sahifasi).
     PATCH  /api/admin/submissions/<pk>/  — AI ajratgan ma'lumotlarni tahrirlash.
     DELETE /api/admin/submissions/<pk>/  — submissionni butunlay o'chirish.
     """
     permission_classes = [IsStaff]
 
-    EDITABLE = ('title', 'keywords', 'abstract', 'references', 'extracted_authors')
+    EDITABLE = ('title', 'keywords', 'abstract', 'references', 'extracted_authors', 'udk', 'org')
+
+    def get(self, request, pk):
+        try:
+            sub = (ArticleSubmission.objects
+                   .select_related('author', 'article', 'article__issue', 'article__category')
+                   .get(pk=pk))
+        except ArticleSubmission.DoesNotExist:
+            return Response({'error': 'Topilmadi'}, status=404)
+        return Response(AdminSubmissionSerializer(sub, context={'request': request}).data)
 
     def patch(self, request, pk):
         try:
@@ -801,20 +857,26 @@ class AdminArticleCreateView(APIView):
             if not issue:
                 return Response({'error': 'Jurnal soni topilmadi'}, status=404)
 
+        from .dashboard import invalidate_dashboard
+        from .doi import attach_to_issue, parse_int
+
         article = Article(
             title=title,
             excerpt=(request.data.get('excerpt') or '').strip(),
             references=(request.data.get('references') or '').strip(),
             author_names=(request.data.get('author_names') or '').strip(),
+            udk=(request.data.get('udk') or '').strip(),
+            page_start=parse_int(request.data.get('page_start')),
+            page_end=parse_int(request.data.get('page_end')),
             category=category,
             year=issue.year if issue else timezone.now().year,
         )
         if 'source_file' in request.FILES:
             article.source_file = request.FILES['source_file']
         if issue:
-            article.issue = issue
-            article.published_at = timezone.now().date()
+            attach_to_issue(article, issue)
         article.save()
+        invalidate_dashboard()
 
         # Keywords → Keyword jadvali
         for name in Keyword.parse_csv(request.data.get('keywords') or ''):

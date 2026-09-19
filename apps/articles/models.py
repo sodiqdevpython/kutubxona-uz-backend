@@ -141,6 +141,9 @@ class Article(BaseModel):
     # Jurnaldagi bet oralig'i (mundarijada «12–19» ko'rinishida chiqadi)
     page_start  = models.PositiveIntegerField(null=True, blank=True, verbose_name='Boshlanish beti')
     page_end    = models.PositiveIntegerField(null=True, blank=True, verbose_name='Tugash beti')
+    doi         = models.CharField(max_length=100, blank=True, verbose_name='DOI',
+                                   help_text='Songa biriktirilganda avtomatik: 10.62499/kutubxona.<yil>.<son>.<NN>')
+    udk         = models.CharField(max_length=50, blank=True, verbose_name='UDK')
     min_read    = models.PositiveIntegerField(default=5,  verbose_name="O'qish (daqiqa)")
     cites       = models.PositiveIntegerField(default=0,  verbose_name='Iqtiboslar')
     views       = models.PositiveIntegerField(default=0,  verbose_name="Ko'rishlar")
@@ -269,6 +272,8 @@ class ArticleSubmission(BaseModel):
         verbose_name='Yuborilgan fayl'
     )
     note        = models.TextField(blank=True, verbose_name="Muallif izohi")
+    udk         = models.CharField(max_length=50, blank=True, verbose_name='UDK')
+    org         = models.CharField(max_length=300, blank=True, verbose_name='Tashkilot')
 
     # ── AI ajratish ────────────────────────────────────────────────────────────
     extracted_text    = models.TextField(blank=True, verbose_name='Fayldan ajratilgan xom matn')
@@ -364,3 +369,27 @@ class ParsedArticle(BaseModel):
 
     def __str__(self):
         return f'{self.order}. {self.author_name} — {self.title[:40]}'
+
+
+# ── Kunlik ko'rishlar (admin panel: «Ko'rishlar · 30 kun») ─────────────────
+
+class ViewDay(models.Model):
+    """Har kun uchun maqola ko'rishlari yig'indisi — 30 kunlik statistika uchun."""
+    date  = models.DateField(unique=True, verbose_name='Sana')
+    views = models.PositiveIntegerField(default=0, verbose_name="Ko'rishlar")
+
+    class Meta:
+        ordering            = ['-date']
+        verbose_name        = "Kunlik ko'rishlar"
+        verbose_name_plural = "Kunlik ko'rishlar"
+
+    def __str__(self):
+        return f'{self.date}: {self.views}'
+
+    @classmethod
+    def bump(cls) -> None:
+        from django.db.models import F
+        from django.utils import timezone
+        obj, _ = cls.objects.get_or_create(date=timezone.localdate())
+        cls.objects.filter(pk=obj.pk).update(views=F('views') + 1)
+

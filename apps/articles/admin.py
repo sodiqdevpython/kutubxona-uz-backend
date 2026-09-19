@@ -37,7 +37,7 @@ class ArticleAdmin(admin.ModelAdmin):
             'description': 'DOCX yoki PDF yuklang. Saqlashda avtomatik parse qilinadi.',
         }),
         ('Tarkib (HTML)', {'fields': ('content', 'content_preview'), 'classes': ('collapse',)}),
-        ('Meta', {'fields': ('year', 'quarter', 'pages', ('page_start', 'page_end'),
+        ('Meta', {'fields': ('year', 'quarter', 'pages', ('page_start', 'page_end'), ('doi', 'udk'),
                              'min_read', 'cites', 'img_variant', 'published_at')}),
         ('Statistika', {'fields': ('views',), 'classes': ('collapse',)}),
     )

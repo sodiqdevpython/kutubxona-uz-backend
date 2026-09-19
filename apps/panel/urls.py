@@ -1,6 +1,7 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from . import views
+from .dashboard import AdminDashboardView
 
 urlpatterns = [
     # ── Auth ──────────────────────────────────────────────────────────────────
@@ -8,6 +9,9 @@ urlpatterns = [
     path('auth/refresh/', TokenRefreshView.as_view(),        name='admin-refresh'),
     path('auth/logout/',  views.AdminLogoutView.as_view(),   name='admin-logout'),
     path('auth/me/',      views.CurrentUserView.as_view(),   name='admin-me'),
+
+    # ── Boshqaruv paneli ──────────────────────────────────────────────────────
+    path('dashboard/', AdminDashboardView.as_view(), name='admin-dashboard'),
 
     # ── Mualliflar ────────────────────────────────────────────────────────────
     path('authors/',          views.AdminAuthorListView.as_view(),   name='admin-author-list'),

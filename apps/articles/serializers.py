@@ -82,6 +82,7 @@ class ArticleDetailSerializer(ArticleListSerializer):
 
     class Meta(ArticleListSerializer.Meta):
         fields = ArticleListSerializer.Meta.fields + (
+            'doi', 'udk',
             'content', 'source_file_url', 'keywords', 'references', 'issue', 'ai_ready',
         )
 
