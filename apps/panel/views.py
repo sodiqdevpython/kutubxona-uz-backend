@@ -736,7 +736,13 @@ class AdminIssueListView(APIView):
     permission_classes = [IsStaff]
 
     def get(self, request):
-        qs = Issue.objects.select_related('journal').prefetch_related('articles').order_by('-year', '-number')
+        from django.db.models import Count, Q
+        qs = (Issue.objects.select_related('journal').prefetch_related('articles')
+              .annotate(
+                  _parsed_pending=Count('parsed_articles', filter=Q(parsed_articles__status='pending'), distinct=True),
+                  _parsed_total=Count('parsed_articles', distinct=True),
+              )
+              .order_by('-year', '-number'))
         return Response(AdminIssueSerializer(qs, many=True, context={'request': request}).data)
 
     def post(self, request):

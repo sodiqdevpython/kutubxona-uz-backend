@@ -269,6 +269,19 @@ class AdminIssueSerializer(serializers.ModelSerializer):
     def get_doi_suffix(self, obj) -> str:
         return f'kutubxona.{obj.year}.{obj.number}'
 
+    # PDF parser holati: ro'yxat ko'rinishida annotate qilinadi (N+1 bo'lmasin),
+    # bitta son uchun to'g'ridan-to'g'ri hisoblanadi.
+    parsed_pending = serializers.SerializerMethodField()
+    parsed_total   = serializers.SerializerMethodField()
+
+    def get_parsed_pending(self, obj) -> int:
+        v = getattr(obj, '_parsed_pending', None)
+        return v if v is not None else obj.parsed_articles.filter(status='pending').count()
+
+    def get_parsed_total(self, obj) -> int:
+        v = getattr(obj, '_parsed_total', None)
+        return v if v is not None else obj.parsed_articles.count()
+
     class Meta:
         model  = Issue
         fields = (
@@ -276,7 +289,9 @@ class AdminIssueSerializer(serializers.ModelSerializer):
             'volume', 'number', 'year', 'season', 'date_label',
             'palette', 'is_current', 'is_upcoming',
             'total_pages', 'views', 'editorial_note', 'editor_name',
-            'article_count', 'cover_image_url', 'pdf_file_url', 'pdf_size', 'doi_suffix', 'created_at',
+            'article_count', 'cover_image_url', 'pdf_file_url', 'pdf_size', 'doi_suffix',
+            'parsed_pending', 'parsed_total', 'created_at',
         )
         read_only_fields = ('id', 'created_at', 'journal_title', 'article_count', 'views',
-                            'cover_image_url', 'pdf_file_url', 'pdf_size', 'doi_suffix')
+                            'cover_image_url', 'pdf_file_url', 'pdf_size', 'doi_suffix',
+                            'parsed_pending', 'parsed_total')
