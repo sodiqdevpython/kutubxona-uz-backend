@@ -1,25 +1,64 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.contrib import admin, messages
+from django.db.models import Q, Sum
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
+from django.utils import timezone
 from django.utils.html import format_html
 
-from .models import PartnerClient, generate_client_secret
+from .models import PartnerClient, PartnerRequestDay, generate_client_secret
 from .tokens import issue_pair
 from .utils import partner_api_base
 
 
+class RequestDayInline(admin.TabularInline):
+    """So'nggi 14 kun — kunlik so'rovlar (faqat ko'rish uchun)."""
+    model           = PartnerRequestDay
+    extra           = 0
+    can_delete      = False
+    max_num         = 0
+    fields          = ('date', 'count')
+    readonly_fields = ('date', 'count')
+    verbose_name_plural = "So'nggi 14 kun — kunlik so'rovlar"
+
+    def get_queryset(self, request):
+        since = timezone.localdate() - timedelta(days=13)
+        return super().get_queryset(request).filter(date__gte=since).order_by('-date')
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(PartnerClient)
 class PartnerClientAdmin(admin.ModelAdmin):
-    list_display  = ('name', 'client_id', 'is_active', 'request_count',
-                     'last_used_at', 'token_button')
+    list_display  = ('name', 'client_id', 'is_active', 'today_count', 'week_count',
+                     'request_count', 'last_used_at', 'token_button')
     list_filter   = ('is_active',)
     search_fields = ('name', 'client_id', 'contact')
     readonly_fields = (
-        'client_id', 'secret_hash', 'token_version', 'request_count',
-        'last_used_at', 'created_at', 'updated_at', 'usage_hint',
+        'client_id', 'secret_hash', 'token_version', 'today_count', 'week_count',
+        'request_count', 'last_used_at', 'created_at', 'updated_at', 'usage_hint',
     )
+    inlines = [RequestDayInline]
+
+    # Ro'yxat va tahrirlash sahifasi uchun «bugun» / «7 kun» yig'indilari — bitta so'rovda
+    def get_queryset(self, request):
+        today = timezone.localdate()
+        return super().get_queryset(request).annotate(
+            _today=Sum('days__count', filter=Q(days__date=today)),
+            _week=Sum('days__count', filter=Q(days__date__gte=today - timedelta(days=6))),
+        )
+
+    @admin.display(description='Bugun', ordering='_today')
+    def today_count(self, obj):
+        return getattr(obj, '_today', None) or 0
+
+    @admin.display(description="So'nggi 7 kun", ordering='_week')
+    def week_count(self, obj):
+        return getattr(obj, '_week', None) or 0
     fieldsets = (
         (None, {
             'fields': ('name', 'contact', 'note', 'is_active'),
@@ -35,8 +74,12 @@ class PartnerClientAdmin(admin.ModelAdmin):
             ),
         }),
         ('Statistika', {
-            'fields': ('token_version', 'request_count', 'last_used_at',
-                       'created_at', 'updated_at'),
+            'fields': ('today_count', 'week_count', 'request_count', 'last_used_at',
+                       'token_version', 'created_at', 'updated_at'),
+            'description': (
+                "«So'rovlar soni» — umumiy hisoblagich (64-bit, nolga tushmaydi); "
+                "«Bugun» va «So'nggi 7 kun» kunlik yig'indilardan olinadi (90 kun saqlanadi)."
+            ),
         }),
     )
     actions = ['rotate_secrets', 'revoke_all_tokens']

@@ -10,6 +10,7 @@ Hamkor bu juftlikni access/refresh tokenga almashtiradi va faqat
 `/api/partner/…` endpointlariga kira oladi (admin paneli emas).
 """
 import secrets
+from datetime import timedelta
 
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import models
@@ -24,6 +25,32 @@ def generate_client_id() -> str:
 
 def generate_client_secret() -> str:
     return secrets.token_urlsafe(40)
+
+
+class PartnerRequestDay(models.Model):
+    """
+    Hamkor so'rovlari — kunlik yig'indi. `PartnerClient.request_count` umumiy
+    (hech qachon nolga tushmaydigan) hisoblagich bo'lib qolaveradi; bu jadval
+    esa «bugun» va «so'nggi 7 kun» ko'rsatkichlari uchun. 90 kundan eski
+    yozuvlar avtomatik tozalanadi (yangi kun boshlanganda).
+    """
+    KEEP_DAYS = 90
+
+    client = models.ForeignKey(
+        'partner.PartnerClient', on_delete=models.CASCADE,
+        related_name='days', verbose_name='Hamkor',
+    )
+    date  = models.DateField(verbose_name='Sana')
+    count = models.PositiveIntegerField(default=0, verbose_name="So'rovlar")
+
+    class Meta:
+        unique_together     = ('client', 'date')
+        ordering            = ['-date']
+        verbose_name        = "Hamkor so'rovlari (kunlik)"
+        verbose_name_plural = "Hamkor so'rovlari (kunlik)"
+
+    def __str__(self):
+        return f'{self.date}: {self.count}'
 
 
 class PartnerClient(BaseModel):
@@ -91,8 +118,18 @@ class PartnerClient(BaseModel):
     # ── Statistika ───────────────────────────────────────────────────────────
 
     def touch(self) -> None:
-        """Har bir muvaffaqiyatli so'rovda chaqiriladi (yengil UPDATE)."""
+        """
+        Har bir muvaffaqiyatli so'rovda chaqiriladi: umumiy hisoblagich va
+        kunlik yig'indi (ikkalasi ham yengil UPDATE, o'qib-yozish poygasisiz).
+        """
+        today = timezone.localdate()
         PartnerClient.objects.filter(pk=self.pk).update(
             last_used_at=timezone.now(),
             request_count=models.F('request_count') + 1,
         )
+        day, created = PartnerRequestDay.objects.get_or_create(client_id=self.pk, date=today)
+        PartnerRequestDay.objects.filter(pk=day.pk).update(count=models.F('count') + 1)
+        if created:   # kuniga bir marta — eski kunlik yozuvlarni tozalaymiz
+            PartnerRequestDay.objects.filter(
+                client_id=self.pk, date__lt=today - timedelta(days=PartnerRequestDay.KEEP_DAYS),
+            ).delete()
