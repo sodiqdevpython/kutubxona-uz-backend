@@ -15,6 +15,7 @@ def _abs_url(field, context):
 class AdminAuthorSerializer(serializers.ModelSerializer):
     article_count = serializers.SerializerMethodField()
     avatar_url    = serializers.SerializerMethodField()
+    is_incomplete = serializers.SerializerMethodField()
 
     def get_article_count(self, obj):
         return obj.articles.count()
@@ -22,13 +23,18 @@ class AdminAuthorSerializer(serializers.ModelSerializer):
     def get_avatar_url(self, obj):
         return _abs_url(obj.avatar, self.context)
 
+    def get_is_incomplete(self, obj) -> bool:
+        """Figma: «To'liqsiz profil» — tashkilot yoki ORCID kiritilmagan."""
+        return not (obj.org and obj.orcid)
+
     class Meta:
         model  = Author
         fields = (
             'id', 'name', 'slug', 'initials', 'role', 'org', 'degree', 'bio',
+            'orcid', 'email', 'scopus_id',
             'avatar_idx', 'avatar_url', 'source',
             'telegram_chat_id', 'telegram_username',
-            'article_count', 'created_at',
+            'article_count', 'is_incomplete', 'created_at',
         )
         read_only_fields = (
             'id', 'slug', 'created_at', 'source',
@@ -104,7 +110,8 @@ class AdminArticleInIssueSerializer(serializers.ModelSerializer):
         model  = Article
         fields = (
             'id', 'title', 'slug', 'year', 'quarter',
-            'pages', 'min_read', 'authors_label', 'category_name', 'published_at',
+            'pages', 'page_start', 'page_end', 'doi', 'views',
+            'min_read', 'authors_label', 'category_name', 'published_at',
         )
 
 
@@ -206,7 +213,7 @@ class AdminSubmissionSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'chat_id', 'tg_name', 'tg_username',
             'title', 'keywords', 'keywords_list', 'abstract', 'references', 'note',
-            'udk', 'org',
+            'udk', 'org', 'preview_html',
             'extracted_authors', 'authors_list', 'ai_filled',
             'status', 'reject_reason', 'created_at', 'submitted_at',
             'author_name', 'author',
@@ -248,12 +255,28 @@ class AdminIssueSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         return request.build_absolute_uri(obj.pdf_file.url) if request else obj.pdf_file.url
 
+    pdf_size   = serializers.SerializerMethodField()
+    doi_suffix = serializers.SerializerMethodField()
+
+    def get_pdf_size(self, obj):
+        if not obj.pdf_file:
+            return None
+        try:
+            return obj.pdf_file.size
+        except (OSError, ValueError):
+            return None
+
+    def get_doi_suffix(self, obj) -> str:
+        return f'kutubxona.{obj.year}.{obj.number}'
+
     class Meta:
         model  = Issue
         fields = (
             'id', 'journal', 'journal_title',
             'volume', 'number', 'year', 'season', 'date_label',
             'palette', 'is_current', 'is_upcoming',
-            'article_count', 'cover_image_url', 'pdf_file_url', 'created_at',
+            'total_pages', 'views', 'editorial_note', 'editor_name',
+            'article_count', 'cover_image_url', 'pdf_file_url', 'pdf_size', 'doi_suffix', 'created_at',
         )
-        read_only_fields = ('id', 'created_at', 'journal_title', 'article_count', 'cover_image_url', 'pdf_file_url')
+        read_only_fields = ('id', 'created_at', 'journal_title', 'article_count', 'views',
+                            'cover_image_url', 'pdf_file_url', 'pdf_size', 'doi_suffix')

@@ -274,6 +274,8 @@ class ArticleSubmission(BaseModel):
     note        = models.TextField(blank=True, verbose_name="Muallif izohi")
     udk         = models.CharField(max_length=50, blank=True, verbose_name='UDK')
     org         = models.CharField(max_length=300, blank=True, verbose_name='Tashkilot')
+    preview_html = models.TextField(blank=True, verbose_name="DOCX oldindan ko'rish (HTML)",
+                                    help_text="Admin sahifasi uchun; birinchi ochilganda avtomatik to'ldiriladi")
 
     # ── AI ajratish ────────────────────────────────────────────────────────────
     extracted_text    = models.TextField(blank=True, verbose_name='Fayldan ajratilgan xom matn')

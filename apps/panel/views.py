@@ -169,17 +169,36 @@ class AdminAuthorListView(APIView):
             limit = self.DEFAULT_LIMIT
         limit = max(1, min(limit, self.MAX_LIMIT))
 
+        from django.db.models import Case, IntegerField, When
+
         # Telegram orqali submission yuborganlar YOKI qo'lda/parser profillari
-        qs = (
+        base = (
             Author.objects
             .filter(
                 Q(telegram_chat_id__isnull=False, submissions__isnull=False) |
                 Q(telegram_chat_id__isnull=True)
             )
             .distinct()
-            .prefetch_related('articles')
-            .order_by('-created_at')
         )
+        incomplete_q = Q(org='') | Q(orcid='')
+
+        # Figma filtr chiplari uchun hisoblar
+        counts = {
+            'all':        base.count(),
+            'incomplete': base.filter(incomplete_q).count(),
+            'telegram':   base.filter(telegram_chat_id__isnull=False).count(),
+            'parser':     base.filter(source='parser').count(),
+            'manual':     base.filter(source='manual').count(),
+        }
+
+        qs = base
+        flt = (request.query_params.get('filter') or '').strip()
+        if flt == 'incomplete':
+            qs = qs.filter(incomplete_q)
+        elif flt == 'telegram':
+            qs = qs.filter(telegram_chat_id__isnull=False)
+        elif flt in ('parser', 'manual', 'telegram_src'):
+            qs = qs.filter(source='telegram' if flt == 'telegram_src' else flt)
 
         search = (request.query_params.get('search') or '').strip()
         if search:
@@ -188,6 +207,11 @@ class AdminAuthorListView(APIView):
                 Q(telegram_username__icontains=search) |
                 Q(org__icontains=search)
             )
+
+        # To'liqsiz profillar tepada (Figma), keyin yangilari
+        qs = (qs.annotate(_inc=Case(When(incomplete_q, then=0), default=1, output_field=IntegerField()))
+                .prefetch_related('articles')
+                .order_by('_inc', '-created_at'))
 
         total = qs.count()
         page  = qs[offset:offset + limit]
@@ -199,6 +223,7 @@ class AdminAuthorListView(APIView):
             'total':       total,
             'has_more':    next_offset < total,
             'next_offset': next_offset,
+            'counts':      counts,
         })
 
     def post(self, request):
@@ -226,6 +251,63 @@ class AdminAuthorDetailView(APIView):
             return Author.objects.prefetch_related('articles').get(pk=pk)
         except Author.DoesNotExist:
             return None
+
+    def get(self, request, pk):
+        """
+        GET /api/admin/authors/<pk>/ — muallif profili (Figma «Muallif detail»):
+        profil + statistika + maqolalari + so'nggi topshirish + faoliyat tarixi + chat.
+        """
+        from django.db.models import Sum
+        from apps.chat.models import Chat
+
+        obj = self._get(pk)
+        if not obj:
+            return Response({'error': 'Topilmadi'}, status=404)
+
+        data = AdminAuthorSerializer(obj, context={'request': request}).data
+        arts = obj.articles.select_related('issue').order_by('-published_at', '-created_at')
+        subs = obj.submissions.exclude(status='draft').order_by('-updated_at')
+
+        data['stats'] = {
+            'published': arts.filter(issue__isnull=False).count(),
+            'pending':   subs.filter(status='pending').count(),
+            'rejected':  subs.filter(status='rejected').count(),
+            'views':     arts.aggregate(s=Sum('views'))['s'] or 0,
+        }
+        data['articles'] = [{
+            'id': str(a.id), 'title': a.title, 'slug': a.slug, 'year': a.year, 'quarter': a.quarter,
+            'published_at': a.published_at.isoformat() if a.published_at else None,
+            'issue_label': f'{a.issue.year} № {a.issue.number}' if a.issue else None,
+            'doi': a.doi, 'views': a.views,
+            'page_start': a.page_start, 'page_end': a.page_end,
+        } for a in arts[:30]]
+        pending = subs.filter(status='pending').first()
+        data['pending_submission'] = ({
+            'id': str(pending.id), 'title': pending.title, 'status': pending.status,
+            'submitted_at': (pending.submitted_at or pending.created_at).isoformat(),
+        } if pending else None)
+
+        events = [{'kind': 'created', 'time': obj.created_at,
+                   'text': {'telegram': 'Profil bot orqali avtomatik yaratildi',
+                            'parser': 'Profil PDF parser orqali yaratildi'}.get(obj.source, "Profil qo'lda yaratildi")}]
+        for s in subs[:10]:
+            title = s.title or 'Sarlavhasiz maqola'
+            events.append({'kind': 'submitted', 'time': s.submitted_at or s.created_at, 'text': f'Botdan maqola yubordi — «{title}»'})
+            if s.status == 'approved':
+                events.append({'kind': 'approved', 'time': s.updated_at, 'text': f'«{title}» tasdiqlandi'})
+            elif s.status == 'rejected':
+                events.append({'kind': 'rejected', 'time': s.updated_at, 'text': f'«{title}» rad etildi'})
+        for a in arts.filter(issue__isnull=False)[:10]:
+            if a.published_at:
+                events.append({'kind': 'published', 'time': a.published_at, 'text': f'«{a.title}» nashr etildi'})
+        def _key(e):
+            t = e['time']
+            return t.isoformat() if hasattr(t, 'isoformat') else str(t)
+        events = [e for e in events if e['time']]
+        events.sort(key=_key, reverse=True)
+        data['activity'] = [{**e, 'time': _key(e)} for e in events[:10]]
+        data['chat_id'] = str(Chat.objects.filter(author=obj).values_list('id', flat=True).first() or '') or None
+        return Response(data)
 
     def patch(self, request, pk):
         obj = self._get(pk)
@@ -505,6 +587,21 @@ class AdminSubmissionUpdateView(APIView):
                    .get(pk=pk))
         except ArticleSubmission.DoesNotExist:
             return Response({'error': 'Topilmadi'}, status=404)
+
+        # DOCX — admin sahifasida ko'rsatish uchun bir marta HTML ga o'giramiz (mammoth)
+        if sub.source_file and not sub.preview_html and sub.source_file.name.lower().endswith('.docx'):
+            try:
+                import mammoth
+                sub.source_file.open('rb')
+                try:
+                    sub.preview_html = mammoth.convert_to_html(sub.source_file).value or ''
+                finally:
+                    sub.source_file.close()
+                if sub.preview_html:
+                    sub.save(update_fields=['preview_html', 'updated_at'])
+            except Exception:
+                sub.preview_html = ''
+
         return Response(AdminSubmissionSerializer(sub, context={'request': request}).data)
 
     def patch(self, request, pk):
