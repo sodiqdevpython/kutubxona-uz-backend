@@ -190,10 +190,9 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 STORAGES = {
     'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
     'staticfiles': {
-        'BACKEND': (
-            'whitenoise.storage.CompressedStaticFilesStorage' if DEBUG
-            else 'whitenoise.storage.CompressedManifestStaticFilesStorage'
-        ),
+        # Manifest (hash'langan nomlar) ATAYLAB ishlatilmaydi: serverdagi nginx /static/ ni
+        # eski papkadan bersa hash'langan fayllar topilmaydi (DEBUG=False da admin CSS yo'qolgan).
+        'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage',
     },
 }
 WHITENOISE_MAX_AGE = 60 * 60 * 24 * 30
