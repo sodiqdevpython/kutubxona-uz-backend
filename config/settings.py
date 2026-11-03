@@ -308,7 +308,7 @@ else:
         o.strip()
         for o in os.environ.get(
             'CORS_ALLOWED_ORIGINS',
-            'https://journalkutubxona.uz,https://www.journalkutubxona.uz'
+            'https://journal.kutubxona.uz,https://www.journal.kutubxona.uz'
         ).split(',') if o.strip()
     ]
     # JWT token bilan ishlatish uchun
@@ -325,7 +325,7 @@ CSRF_TRUSTED_ORIGINS = [
     o.strip()
     for o in os.environ.get(
         'CSRF_TRUSTED_ORIGINS',
-        'https://journalkutubxona.uz,https://www.journalkutubxona.uz,https://api.journalkutubxona.uz'
+        'https://journal.kutubxona.uz,https://www.journal.kutubxona.uz,https://api.journal.kutubxona.uz'
     ).split(',') if o.strip()
 ]
 
@@ -346,7 +346,7 @@ if not DEBUG:
 
 # ── WebSocket origin ruxsati ─────────────────────────────────────────────────
 # '*' — barcha originlar (dev). Productionda frontend domenini yozing:
-#   WS_ALLOWED_ORIGINS=https://journalkutubxona.uz
+#   WS_ALLOWED_ORIGINS=https://journal.kutubxona.uz
 WS_ALLOWED_ORIGINS = [
     o.strip()
     for o in os.environ.get('WS_ALLOWED_ORIGINS', '*').split(',') if o.strip()

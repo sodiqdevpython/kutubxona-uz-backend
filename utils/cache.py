@@ -74,7 +74,9 @@ def bump_all() -> None:
 # ── Kalit va keshlanadigan so'rov shartlari ──────────────────────────────────
 
 def request_cache_key(request, namespace: str) -> str:
-    raw = '{}?{}'.format(request.path, request.META.get('QUERY_STRING', ''))
+    # Javobdagi fayl havolalari absolyut (domen + sxema), shuning uchun ular ham kalitga kiradi:
+    # aks holda bir domendan keshlangan javob boshqa domenga eski manzillarni beradi.
+    raw = '{}://{}{}?{}'.format(request.scheme, request.get_host(), request.path, request.META.get('QUERY_STRING', ''))
     digest = hashlib.md5(raw.encode('utf-8')).hexdigest()
     return 'api:{}:v{}:{}'.format(namespace, get_version(namespace), digest)
 
