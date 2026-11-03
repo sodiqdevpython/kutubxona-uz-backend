@@ -15,7 +15,6 @@ shuning uchun frontendda polling (setInterval) kerak emas.
 import logging
 
 from django.conf import settings
-from django.db.models import Q
 from django.shortcuts import get_object_or_404
 
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
@@ -24,6 +23,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.authors.models import Author
+from utils.search import search_q
 from utils.telegram import send_message, send_photo, send_document
 
 from . import events
@@ -97,10 +97,7 @@ class AdminChatListView(APIView):
 
         search = (request.query_params.get('search') or '').strip()
         if search:
-            qs = qs.filter(
-                Q(author__name__icontains=search) |
-                Q(author__telegram_username__icontains=search)
-            )
+            qs = qs.filter(search_q(search, ['author__name', 'author__telegram_username']))
 
         total = qs.count()
         page  = qs[offset:offset + limit]

@@ -253,9 +253,10 @@ SIMPLE_JWT = {
 #   CAPTCHA_PROVIDER=turnstile        (turnstile | hcaptcha | recaptcha)
 #   CAPTCHA_SITE_KEY=...
 #   CAPTCHA_SECRET_KEY=...
-CAPTCHA_PROVIDER   = os.environ.get('CAPTCHA_PROVIDER', 'turnstile').strip()
-CAPTCHA_SITE_KEY   = os.environ.get('CAPTCHA_SITE_KEY', '').strip()
-CAPTCHA_SECRET_KEY = os.environ.get('CAPTCHA_SECRET_KEY', '').strip()
+# CAPTCHA-OFF:
+# CAPTCHA_PROVIDER   = os.environ.get('CAPTCHA_PROVIDER', 'turnstile').strip()
+# CAPTCHA_SITE_KEY   = os.environ.get('CAPTCHA_SITE_KEY', '').strip()
+# CAPTCHA_SECRET_KEY = os.environ.get('CAPTCHA_SECRET_KEY', '').strip()
 
 # ── Hamkor (tashqi xizmat) API tokenlari ─────────────────────────────────────
 PARTNER_ACCESS_LIFETIME  = timedelta(

@@ -1,4 +1,7 @@
 """
+CAPTCHA-OFF: vaqtincha ishlatilmaydi — barcha chaqiruvlar kommentda.
+Qaytarish uchun loyihada «CAPTCHA-OFF» ni qidiring.
+
 CAPTCHA tekshiruvi (admin login uchun).
 
 Uch provayder qo'llab-quvvatlanadi — `.env` da kalitlarni qo'yish kifoya,

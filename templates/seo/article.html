@@ -1,0 +1,34 @@
+{% extends "seo/base.html" %}
+{% block title %}{{ article.title }} — {{ site_name }}{% endblock %}
+{% block description %}{{ description|truncatechars:300 }}{% endblock %}
+{% block og_title %}{{ article.title }}{% endblock %}
+{% block og_type %}article{% endblock %}
+{% block head %}
+<meta name="citation_title" content="{{ article.title }}">
+{% for name in authors %}<meta name="citation_author" content="{{ name }}">
+{% endfor %}<meta name="citation_publication_date" content="{{ issue.year }}">
+<meta name="citation_journal_title" content="{{ journal }}">
+<meta name="citation_issn" content="{{ issn }}">
+<meta name="citation_volume" content="{{ issue.volume }}">
+<meta name="citation_issue" content="{{ issue.number }}">
+{% if article.page_start %}<meta name="citation_firstpage" content="{{ article.page_start }}">{% endif %}
+{% if article.page_end %}<meta name="citation_lastpage" content="{{ article.page_end }}">{% endif %}
+{% if article.doi %}<meta name="citation_doi" content="{{ article.doi }}">{% endif %}
+<meta name="citation_language" content="{{ citation_lang }}">
+<meta name="citation_abstract_html_url" content="{{ canonical }}">
+{% if pdf_url %}<meta name="citation_pdf_url" content="{{ pdf_url }}">{% endif %}
+{% for word in keywords %}<meta name="citation_keywords" content="{{ word }}">
+{% endfor %}{% endblock %}
+{% block content %}
+<article>
+  <h1>{{ article.title }}</h1>
+  <p>{{ authors|join:", " }}</p>
+  <p>{{ journal }}, {{ issue.year }}, № {{ issue.number }}{% if article.page_start %}, {{ article.page_start }}{% if article.page_end %}–{{ article.page_end }}{% endif %}-b.{% endif %}{% if article.doi %}. DOI: {{ article.doi }}{% endif %}</p>
+  <p><a href="/archive/{{ issue.id }}">{{ journal }} № {{ issue.number }} · {{ issue.year }}</a></p>
+  {% if article.excerpt %}<h2>Annotatsiya</h2><p>{{ article.excerpt }}</p>{% endif %}
+  {% if keywords %}<p>{{ keywords|join:", " }}</p>{% endif %}
+  {% if paragraphs %}<h2>To‘liq matn</h2>{% for line in paragraphs %}<p>{{ line }}</p>
+  {% endfor %}{% endif %}
+  {% if article.references %}<h2>Adabiyotlar</h2><p>{{ article.references|linebreaksbr }}</p>{% endif %}
+</article>
+{% endblock %}

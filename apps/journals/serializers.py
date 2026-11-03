@@ -1,6 +1,3 @@
-import re
-from collections import OrderedDict
-
 from rest_framework import serializers
 
 from .models import Journal, Issue
@@ -10,6 +7,7 @@ class IssueSerializer(serializers.ModelSerializer):
     article_count   = serializers.IntegerField(read_only=True)
     cover_image_url = serializers.SerializerMethodField()
     pdf_file_url    = serializers.SerializerMethodField()
+    pdf_size        = serializers.SerializerMethodField()
     journal_id      = serializers.SerializerMethodField()
     journal_title   = serializers.SerializerMethodField()
 
@@ -25,6 +23,14 @@ class IssueSerializer(serializers.ModelSerializer):
     def get_pdf_file_url(self, obj) -> str | None:
         return self._abs(obj.pdf_file)
 
+    def get_pdf_size(self, obj) -> int | None:
+        if not obj.pdf_file:
+            return None
+        try:
+            return obj.pdf_file.size
+        except (OSError, ValueError):
+            return None
+
     def get_journal_id(self, obj) -> str | None:
         return str(obj.journal_id) if obj.journal_id else None
 
@@ -37,22 +43,12 @@ class IssueSerializer(serializers.ModelSerializer):
             'id', 'volume', 'number', 'year', 'season',
             'date_label', 'palette', 'is_current', 'is_upcoming',
             'article_count', 'total_pages', 'views',
-            'cover_image_url', 'pdf_file_url',
+            'cover_image_url', 'pdf_file_url', 'pdf_size',
             'journal_id', 'journal_title',
         )
 
 
-def _lang_code(title: str) -> str:
-    """Sarlavhadan til kodi — jadvalda «UZ · RU · EN» ko'rinishida chiqadi."""
-    if re.search(r'[ўқғҳЎҚҒҲ]', title):
-        return 'ЎЗ'
-    if re.search(r'[а-яА-ЯёЁ]', title):
-        return 'RU'
-    if re.search(r"[‘’']|\b(va|bilan|uchun|kutubxona)\b", title, re.I):
-        return 'UZ'
-    if re.search(r'\b(the|and|of|in|for|with|study|library)\b', title, re.I):
-        return 'EN'
-    return 'UZ'
+_LANG_CODES = {'uz': 'UZ', 'uz-cyrl': 'ЎЗ', 'ru': 'RU', 'en': 'EN'}
 
 
 class IssueDetailSerializer(IssueSerializer):
@@ -69,7 +65,6 @@ class IssueDetailSerializer(IssueSerializer):
     editorial_note = serializers.CharField(read_only=True)
     editor_name    = serializers.CharField(read_only=True)
     issn           = serializers.SerializerMethodField()
-    pdf_size       = serializers.SerializerMethodField()
     sections       = serializers.SerializerMethodField()
     categories     = serializers.SerializerMethodField()
     languages      = serializers.SerializerMethodField()
@@ -78,20 +73,12 @@ class IssueDetailSerializer(IssueSerializer):
 
     class Meta(IssueSerializer.Meta):
         fields = IssueSerializer.Meta.fields + (
-            'editorial_note', 'editor_name', 'issn', 'pdf_size',
+            'editorial_note', 'editor_name', 'issn',
             'sections', 'categories', 'languages', 'prev_issue', 'next_issue',
         )
 
     def get_issn(self, obj) -> str:
         return obj.journal.issn if obj.journal_id else ''
-
-    def get_pdf_size(self, obj) -> int | None:
-        if not obj.pdf_file:
-            return None
-        try:
-            return obj.pdf_file.size
-        except (OSError, ValueError):
-            return None
 
     # ── Mundarija ────────────────────────────────────────────────────────────
 
@@ -107,12 +94,14 @@ class IssueDetailSerializer(IssueSerializer):
     def get_sections(self, obj) -> list:
         from apps.articles.serializers import ArticleTocSerializer
 
-        groups: OrderedDict[str, dict] = OrderedDict()
+        # Jurnaldagi tartib saqlanadi: bir rubrika sonda qayta kelsa, alohida guruh bo'ladi.
+        # Yo'nalishi yo'q maqolalar nomsiz guruhda (sarlavhasiz) turadi.
+        groups: list[dict] = []
         for art in self._articles(obj):
-            key = art.category.name if art.category_id else 'Boshqa'
-            g = groups.setdefault(key, {
-                'category': key, 'articles': [], 'page_start': None, 'page_end': None,
-            })
+            key = art.category.name if art.category_id else ''
+            if not groups or groups[-1]['category'] != key:
+                groups.append({'category': key, 'articles': [], 'page_start': None, 'page_end': None})
+            g = groups[-1]
             g['articles'].append(art)
             if art.page_start:
                 g['page_start'] = art.page_start if g['page_start'] is None else min(g['page_start'], art.page_start)
@@ -124,19 +113,19 @@ class IssueDetailSerializer(IssueSerializer):
             'page_start': g['page_start'],
             'page_end':   g['page_end'],
             'articles':   ArticleTocSerializer(g['articles'], many=True, context=self.context).data,
-        } for g in groups.values()]
+        } for g in groups]
 
     def get_categories(self, obj) -> list:
         counts: dict[str, int] = {}
-        for art in obj.articles.select_related('category'):
-            key = art.category.name if art.category_id else 'Boshqa'
+        for art in obj.articles.select_related('category').exclude(category=None):
+            key = art.category.name
             counts[key] = counts.get(key, 0) + 1
         return [{'name': k, 'count': v} for k, v in sorted(counts.items(), key=lambda x: -x[1])]
 
     def get_languages(self, obj) -> list:
         langs: list[str] = []
         for art in obj.articles.all():
-            code = _lang_code(art.title)
+            code = _LANG_CODES.get(art.language, 'UZ')
             if code not in langs:
                 langs.append(code)
         return langs

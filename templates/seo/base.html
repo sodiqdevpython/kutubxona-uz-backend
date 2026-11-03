@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ site_name }}{% endblock %}</title>
+<link rel="canonical" href="{{ canonical }}">
+<meta name="description" content="{% block description %}Kutubxona — axborot-kutubxona texnologiyalari ilmiy-amaliy jurnali. Ochiq kirish arxivi.{% endblock %}">
+<meta property="og:site_name" content="{{ site_name }}">
+<meta property="og:url" content="{{ canonical }}">
+<meta property="og:title" content="{% block og_title %}{{ site_name }}{% endblock %}">
+<meta property="og:type" content="{% block og_type %}website{% endblock %}">
+{% if image_url %}<meta property="og:image" content="{{ image_url }}">{% endif %}
+{% block head %}{% endblock %}
+</head>
+<body>
+<header><a href="/">{{ site_name }}</a></header>
+<main>{% block content %}{% endblock %}</main>
+</body>
+</html>

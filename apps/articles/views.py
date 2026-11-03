@@ -6,11 +6,15 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
 from django.conf import settings
-from django.db.models import Q
+from django.db import connection
+from django.db.models import CharField, Count, F, Func, Q, Value
+from django.db.models.functions import Collate
 import django_filters
+import uuid
 
 from utils.telegram import send_message as tg_send
 from utils.request_ip import client_ip
+from utils.search import FoldedSearchFilter, search_q
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 
@@ -32,17 +36,41 @@ class _NumberInFilter(django_filters.BaseInFilter, django_filters.NumberFilter):
 class _CharInFilter(django_filters.BaseInFilter, django_filters.CharFilter):
     pass
 
+class _UUIDInFilter(django_filters.BaseInFilter, django_filters.UUIDFilter):
+    pass
+
+
+class ArticleOrderingFilter(filters.OrderingFilter):
+    """`?ordering=title` — o'zbek alifbosi bo'yicha, boshidagi qo'shtirnoq va belgilarsiz."""
+
+    def filter_queryset(self, request, queryset, view):
+        ordering = self.get_ordering(request, queryset, view)
+        if not ordering or connection.vendor != 'postgresql' or not {'title', '-title'} & set(ordering):
+            return super().filter_queryset(request, queryset, view)
+        queryset = queryset.annotate(_title_key=Collate(
+            Func(F('title'), Value(r'^[^[:alnum:]]+'), Value(''), function='regexp_replace', output_field=CharField()),
+            'uz-x-icu',
+        ))
+        keys = [o.replace('title', '_title_key') if o.lstrip('-') == 'title' else o for o in ordering]
+        return queryset.order_by(*keys)
+
 class ArticleFilter(django_filters.FilterSet):
     """
     Supports:
       ?categories=slug1,slug2   — category slug IN filter
-      ?years=2026,2025          — year IN filter
+      ?years=2026,2025          — jurnal soni yili IN filter
+      ?issues=<uuid>,<uuid>     — jurnal soni IN filter
       ?quarters=1,2             — quarter IN filter
+      ?langs=uz,ru              — til IN filter
+      ?keywords=slug1,slug2     — kalit so'z slug IN filter
       ?author=some-slug         — author slug exact match
     """
     categories = _CharInFilter(field_name='category__slug', lookup_expr='in')
-    years      = _NumberInFilter(field_name='year',    lookup_expr='in')
-    quarters   = _NumberInFilter(field_name='quarter', lookup_expr='in')
+    years      = _NumberInFilter(field_name='issue__year', lookup_expr='in')
+    issues     = _UUIDInFilter(field_name='issue__id',     lookup_expr='in')
+    quarters   = _NumberInFilter(field_name='quarter',     lookup_expr='in')
+    langs      = _CharInFilter(field_name='language',      lookup_expr='in')
+    keywords   = _CharInFilter(field_name='keywords__slug', lookup_expr='in')
     author     = django_filters.CharFilter(field_name='authors__slug', lookup_expr='exact')
 
     class Meta:
@@ -68,13 +96,13 @@ class ArticleViewSet(CachedListMixin, viewsets.ReadOnlyModelViewSet):
         .prefetch_related('authors')
         .distinct()
     )
-    filter_backends  = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filter_backends  = [DjangoFilterBackend, FoldedSearchFilter, ArticleOrderingFilter]
     filterset_class  = ArticleFilter
-    search_fields    = ['title', 'excerpt', 'author_names', 'authors__name', 'keywords__name']
-    ordering_fields  = ['created_at', 'views', 'cites', 'published_at', 'issue__year', 'issue__number']
-    # Default: arxiv yili (jurnal soni) bo'yicha — eng yangi yil tepada,
-    # create/assign vaqti bo'yicha emas.
-    ordering         = ['-issue__year', '-issue__number', '-published_at', '-created_at']
+    search_fields    = ['title', 'excerpt', 'author_names', 'authors__name', 'keywords__name', 'doi']
+    ordering_fields  = ['created_at', 'views', 'cites', 'published_at', 'issue__year', 'issue__number', 'page_start', 'title']
+    # Default: arxiv yili (jurnal soni) bo'yicha — eng yangi yil tepada, son ichida
+    # jurnaldagi bet tartibida; create/assign vaqti bo'yicha emas.
+    ordering         = ['-issue__year', '-issue__number', 'page_start', '-created_at']
     lookup_field     = 'slug'
 
     def get_serializer_class(self):
@@ -111,15 +139,53 @@ class ArticleViewSet(CachedListMixin, viewsets.ReadOnlyModelViewSet):
         q  = request.query_params.get('q', '').strip()
         qs = self.get_queryset()
         if q:
-            qs = qs.filter(
-                Q(title__icontains=q) |
-                Q(excerpt__icontains=q) |
-                Q(author_names__icontains=q) |
-                Q(authors__name__icontains=q) |
-                Q(keywords__name__icontains=q)
-            ).distinct()
+            qs = qs.filter(search_q(q, self.search_fields)).distinct()
         serializer = ArticleListSerializer(qs[:10], many=True, context={'request': request})
         return Response(serializer.data)
+
+    @action(detail=False, url_path='facets', permission_classes=[AllowAny])
+    @cached_action(namespace=NS_CATALOG)
+    def facets(self, request):
+        """
+        GET /api/articles/facets/[?issues=<uuid>]
+        Filtrlar paneli uchun barcha chop etilgan maqolalar bo'yicha hisoblar — ro'yxat
+        sahifalanadi, shuning uchun brauzerda sanab bo'lmaydi.
+        """
+        published = Article.objects.filter(issue__isnull=False)
+        issue_ids = [i for i in request.query_params.get('issues', '').split(',') if i]
+        if issue_ids:
+            try:
+                published = published.filter(issue_id__in=[uuid.UUID(i) for i in issue_ids])
+            except ValueError:
+                return Response({'error': 'Noto\'g\'ri issues'}, status=400)
+
+        years = published.values('issue__year').annotate(n=Count('id')).order_by('-issue__year')
+        issues = (
+            published.values('issue_id', 'issue__number', 'issue__year', 'issue__volume')
+            .annotate(n=Count('id')).order_by('-issue__year', '-issue__number')
+        )
+        categories = (
+            published.exclude(category=None)
+            .values('category__slug', 'category__name')
+            .annotate(n=Count('id')).order_by('-n', 'category__name')
+        )
+        keywords = (
+            published.exclude(keywords=None)
+            .values('keywords__slug', 'keywords__name')
+            .annotate(n=Count('id')).order_by('-n', 'keywords__name')
+        )
+        languages = published.values('language').annotate(n=Count('id')).order_by('-n')
+        return Response({
+            'total':      published.count(),
+            'years':      [{'value': r['issue__year'], 'count': r['n']} for r in years],
+            'issues':     [{
+                'id': str(r['issue_id']), 'number': r['issue__number'],
+                'year': r['issue__year'], 'count': r['n'],
+            } for r in issues],
+            'categories': [{'slug': r['category__slug'], 'name': r['category__name'], 'count': r['n']} for r in categories],
+            'keywords':   [{'slug': r['keywords__slug'], 'name': r['keywords__name'], 'count': r['n']} for r in keywords],
+            'languages':  [{'code': r['language'], 'count': r['n']} for r in languages],
+        })
 
     @action(detail=False, url_path='stats', permission_classes=[AllowAny])
     @cached_action(namespace=NS_CATALOG, ttl=300)
@@ -198,25 +264,33 @@ class ArticleViewSet(CachedListMixin, viewsets.ReadOnlyModelViewSet):
     def related(self, request, slug=None):
         """
         GET /api/articles/<slug>/related/
-        Kalit so'zlar bo'yicha yaqin maqolalar — eng ko'p umumiy keyword'ga ko'ra.
-        Kamida 1 umumiy keyword bo'lishi shart.
+        Yaqin maqolalar: avval eng ko'p umumiy kalit so'z, keyin shu yo'nalish,
+        ular bo'lmasa shu son maqolalari.
         """
-        from django.db.models import Count
         article = self.get_object()
+        others = self.get_queryset().exclude(pk=article.pk)
         kw_ids = list(article.keywords.values_list('id', flat=True))
 
-        if not kw_ids:
-            return Response([])
-
-        qs = (
-            self.get_queryset()
-            .exclude(pk=article.pk)
-            .filter(keywords__in=kw_ids)
+        picked = list(
+            others.filter(keywords__in=kw_ids)
             .annotate(shared=Count('keywords', filter=Q(keywords__in=kw_ids), distinct=True))
-            .order_by('-shared', '-published_at')
-        )[:6]
+            .order_by('-shared', '-issue__year', '-issue__number')[:6]
+        ) if kw_ids else []
 
-        return Response(ArticleListSerializer(qs, many=True, context={'request': request}).data)
+        seen = {a.pk for a in picked}
+        fallbacks = []
+        if article.category_id:
+            fallbacks.append(others.filter(category_id=article.category_id))
+        if article.issue_id:
+            fallbacks.append(others.filter(issue_id=article.issue_id))
+        for qs in fallbacks:
+            if len(picked) >= 3:
+                break
+            for candidate in qs.exclude(pk__in=seen)[:6 - len(picked)]:
+                picked.append(candidate)
+                seen.add(candidate.pk)
+
+        return Response(ArticleListSerializer(picked, many=True, context={'request': request}).data)
 
 
 # ── Bot submission endpointlari (draft → finalize) ────────────────────────────

@@ -1,0 +1,12 @@
+{% extends "seo/base.html" %}
+{% block title %}{{ issue.journal.title }} № {{ issue.number }} · {{ issue.year }} — {{ site_name }}{% endblock %}
+{% block description %}{{ issue.journal.title }} jurnalining {{ issue.year }}-yil {{ issue.number }}-soni mundarijasi.{% endblock %}
+{% block og_title %}{{ issue.journal.title }} № {{ issue.number }} · {{ issue.year }}{% endblock %}
+{% block content %}
+<h1>{{ issue.journal.title }} № {{ issue.number }} · {{ issue.year }}</h1>
+{% if issue.editorial_note %}<p>{{ issue.editorial_note }}</p>{% endif %}
+<h2>Mundarija</h2>
+<ol>
+{% for article in articles %}  <li><a href="/articles/{{ article.slug }}">{{ article.title }}</a>{% if article.page_start %} ({{ article.page_start }}{% if article.page_end %}–{{ article.page_end }}{% endif %}-b.){% endif %}</li>
+{% endfor %}</ol>
+{% endblock %}

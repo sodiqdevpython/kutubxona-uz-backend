@@ -36,10 +36,12 @@
     <label for="sec">parol</label>
     <input id="sec" name="client_secret" type="password" required>
 
+    {% comment %} CAPTCHA-OFF:
     {% if captcha.enabled %}
       <div class="{{ captcha.widget_class }}" data-sitekey="{{ captcha.site_key }}" style="margin-top:16px"></div>
       <script src="{{ captcha.script_url }}" async defer></script>
     {% endif %}
+    {% endcomment %}
 
     {% if error %}<div class="err">{{ error }}</div>{% endif %}
 

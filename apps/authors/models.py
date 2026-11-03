@@ -1,6 +1,7 @@
 from django.db import models
 from slugify import slugify
 from utils.models import BaseModel
+from utils.text import normalize_person_name
 from utils.validators import validate_image
 
 
@@ -59,6 +60,7 @@ class Author(BaseModel):
         return self.name
 
     def save(self, *args, **kwargs):
+        self.name = normalize_person_name(self.name)
         if not self.initials and self.name:
             parts = self.name.split()
             self.initials = ''.join(p[0].upper() for p in parts[:2])

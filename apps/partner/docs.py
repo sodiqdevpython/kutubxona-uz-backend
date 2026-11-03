@@ -8,8 +8,7 @@ Hamkor `client_id` (login) + `client_secret` (parol) bilan kiradi. Sahifada:
     token bilan ishlaydi.
 
 Sessiya oddiy Django sessiyasi; hamkor o'chirilsa yoki tokenlari bekor
-qilinsa sessiya ham tugaydi. Kirish sahifasida CAPTCHA (`.env` dagi
-CAPTCHA_* kalitlari) — admin login bilan bir xil sozlama.
+qilinsa sessiya ham tugaydi. CAPTCHA-OFF: kirish sahifasida CAPTCHA vaqtincha o'chirilgan.
 """
 from django.conf import settings
 from django.core.cache import cache
@@ -21,7 +20,7 @@ from django.views.decorators.cache import never_cache
 from drf_spectacular.views import SpectacularAPIView
 from rest_framework.permissions import BasePermission
 
-from utils import captcha
+# CAPTCHA-OFF: from utils import captcha
 from utils.request_ip import client_ip
 
 from .models import PartnerClient
@@ -63,7 +62,7 @@ class PartnerDocsLoginView(View):
 
     def _render(self, request, status=200, **extra):
         return render(request, self.template_name, {
-            'captcha': captcha.public_config(),
+            # CAPTCHA-OFF: 'captcha': captcha.public_config(),
             'error':   None,
             **extra,
         }, status=status)
@@ -81,14 +80,14 @@ class PartnerDocsLoginView(View):
 
         client_id = (request.POST.get('client_id') or '').strip()
 
-        # CAPTCHA (yoqilgan bo'lsa) — parolni tekshirishdan oldin
-        if captcha.is_enabled():
-            field = captcha.public_config()['response_field']
-            ok, _code = captcha.verify(request.POST.get(field, ''), ip)
-            if not ok:
-                cache.set(key, cache.get(key, 0) + 1, LOGIN_WINDOW)
-                return self._render(request, 400, error="Tekshiruvdan o'tmadingiz. Qaytadan urinib ko'ring.",
-                                    client_id=client_id)
+        # CAPTCHA-OFF: CAPTCHA (yoqilgan bo'lsa) — parolni tekshirishdan oldin
+        # if captcha.is_enabled():
+        #     field = captcha.public_config()['response_field']
+        #     ok, _code = captcha.verify(request.POST.get(field, ''), ip)
+        #     if not ok:
+        #         cache.set(key, cache.get(key, 0) + 1, LOGIN_WINDOW)
+        #         return self._render(request, 400, error="Tekshiruvdan o'tmadingiz. Qaytadan urinib ko'ring.",
+        #                             client_id=client_id)
 
         secret = request.POST.get('client_secret') or ''
         client = PartnerClient.objects.filter(client_id=client_id, is_active=True).first()

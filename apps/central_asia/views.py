@@ -9,6 +9,7 @@ from rest_framework.response import Response
 
 from .models import CentralAsiaPost
 from utils.request_ip import client_ip
+from utils.search import FoldedSearchFilter
 from .serializers import (
     CentralAsiaPostListSerializer,
     CentralAsiaPostDetailSerializer,
@@ -22,7 +23,7 @@ class CentralAsiaPostViewSet(CachedListMixin, viewsets.ReadOnlyModelViewSet):
     GET /api/central-asia/<slug>/                  — detail (bizning view'ni oshiradi)
     """
     queryset         = CentralAsiaPost.objects.filter(is_published=True)
-    filter_backends  = [filters.SearchFilter, filters.OrderingFilter]
+    filter_backends  = [FoldedSearchFilter, filters.OrderingFilter]
     search_fields    = ['title', 'excerpt', 'author_line', 'content']
     ordering_fields  = ['sort_order', 'created_at', 'published_at', 'views_scraped', 'quote_number']
     # sort_order — manba saytdagi tartib (0 = eng yangi, 1-sahifada birinchi)

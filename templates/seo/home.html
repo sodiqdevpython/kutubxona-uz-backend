@@ -1,0 +1,12 @@
+{% extends "seo/base.html" %}
+{% block title %}{{ site_name }} — axborot-kutubxona texnologiyalari jurnali{% endblock %}
+{% block og_title %}{{ site_name }} — axborot-kutubxona texnologiyalari jurnali{% endblock %}
+{% block content %}
+<h1>{{ site_name }}</h1>
+<p>Axborot-kutubxona texnologiyalari ilmiy-amaliy jurnali. ISSN {{ issn }}. Ochiq kirish.</p>
+<h2>Jurnal sonlari</h2>
+<ul>
+{% for issue in issues %}  <li><a href="/archive/{{ issue.id }}">{{ issue.journal.title }} № {{ issue.number }} · {{ issue.year }}</a></li>
+{% endfor %}</ul>
+<p><a href="/articles">Barcha maqolalar</a> · <a href="/authors">Mualliflar</a> · <a href="/about">Jurnal haqida</a></p>
+{% endblock %}

@@ -4,7 +4,7 @@ from utils.validators import validate_document, validate_image
 
 
 class Journal(BaseModel):
-    title = models.CharField(max_length=200, default='Kutubxona Arxivi', verbose_name='Jurnal nomi')
+    title = models.CharField(max_length=200, default='Kutubxona', verbose_name='Jurnal nomi')
     issn  = models.CharField(max_length=20, blank=True, verbose_name='ISSN')
 
     class Meta:

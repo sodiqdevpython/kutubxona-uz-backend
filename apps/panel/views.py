@@ -13,6 +13,8 @@ from apps.articles.models import Article, ArticleSubmission, Category, Keyword, 
 from apps.authors.models import Author
 from apps.journals.models import Journal, Issue
 from utils.request_ip import client_ip
+from utils.search import search_q
+from utils.text import repair_title, sentence_case
 from utils.throttles import ClientIPThrottle
 from utils.telegram import send_message as tg_send
 from .serializers import (
@@ -55,46 +57,47 @@ class AdminTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 class AdminLoginView(TokenObtainPairView):
     """
-    POST /api/admin/auth/login/  {username, password, captcha_token?}
+    POST /api/admin/auth/login/  {username, password}
 
-    CAPTCHA yoqilgan bo'lsa (`.env` da kalitlar bor) `captcha_token` majburiy.
-    Bundan tashqari IP bo'yicha chegara bor — parol tanlashga qarshi.
+    CAPTCHA-OFF: CAPTCHA vaqtincha o'chirilgan, himoya — IP bo'yicha chegara.
     """
     serializer_class = AdminTokenObtainPairSerializer
     throttle_classes = [LoginThrottle]
 
     def post(self, request, *args, **kwargs):
-        from utils import captcha
-
-        if captcha.is_enabled():
-            token = (
-                request.data.get('captcha_token')
-                or request.data.get('captcha')
-                or ''
-            )
-            ok, code = captcha.verify(token, client_ip(request))
-            if not ok:
-                return Response(
-                    {'detail': "Tekshiruvdan o'tmadingiz. Qaytadan urinib ko'ring.",
-                     'error': code},
-                    status=400,
-                )
+        # CAPTCHA-OFF:
+        # from utils import captcha
+        #
+        # if captcha.is_enabled():
+        #     token = (
+        #         request.data.get('captcha_token')
+        #         or request.data.get('captcha')
+        #         or ''
+        #     )
+        #     ok, code = captcha.verify(token, client_ip(request))
+        #     if not ok:
+        #         return Response(
+        #             {'detail': "Tekshiruvdan o'tmadingiz. Qaytadan urinib ko'ring.",
+        #              'error': code},
+        #             status=400,
+        #         )
 
         return super().post(request, *args, **kwargs)
 
 
-class CaptchaConfigView(APIView):
-    """
-    GET /api/auth/captcha/
-    Frontend login sahifasi shu yerdan CAPTCHA sozlamasini oladi.
-    Maxfiy kalit BERILMAYDI.
-    """
-    authentication_classes = []
-    permission_classes     = [AllowAny]
-
-    def get(self, request):
-        from utils import captcha
-        return Response(captcha.public_config())
+# CAPTCHA-OFF:
+# class CaptchaConfigView(APIView):
+#     """
+#     GET /api/auth/captcha/
+#     Frontend login sahifasi shu yerdan CAPTCHA sozlamasini oladi.
+#     Maxfiy kalit BERILMAYDI.
+#     """
+#     authentication_classes = []
+#     permission_classes     = [AllowAny]
+#
+#     def get(self, request):
+#         from utils import captcha
+#         return Response(captcha.public_config())
 
 
 class AdminLogoutView(APIView):
@@ -202,11 +205,7 @@ class AdminAuthorListView(APIView):
 
         search = (request.query_params.get('search') or '').strip()
         if search:
-            qs = qs.filter(
-                Q(name__icontains=search) |
-                Q(telegram_username__icontains=search) |
-                Q(org__icontains=search)
-            )
+            qs = qs.filter(search_q(search, ['name', 'telegram_username', 'org']))
 
         # To'liqsiz profillar tepada (Figma), keyin yangilari
         qs = (qs.annotate(_inc=Case(When(incomplete_q, then=0), default=1, output_field=IntegerField()))
@@ -356,12 +355,7 @@ class AdminSubmissionListView(APIView):
 
         search = (request.query_params.get('search') or '').strip()
         if search:
-            qs = qs.filter(
-                Q(title__icontains=search) |
-                Q(tg_name__icontains=search) |
-                Q(tg_username__icontains=search) |
-                Q(keywords__icontains=search)
-            )
+            qs = qs.filter(search_q(search, ['title', 'tg_name', 'tg_username', 'keywords']))
 
         # Pagination
         try:
@@ -1228,11 +1222,18 @@ class AdminParsedSaveView(APIView):
         # mode == 'none' -> profil biriktirilmaydi (faqat matn nomi)
 
         # ── Maqola yaratish ───────────────────────────────────────────────────
+        # Jurnal rubrikasi — maqolaning yo'nalishi; bet oralig'i ham parserdan keladi
+        section = sentence_case(pa.section or '')
+        category = Category.objects.get_or_create(name=section)[0] if section else None
         article = Article(
-            title=pa.title or (f'{pa.author_name} maqolasi' if pa.author_name else 'Maqola'),
+            title=repair_title(pa.title) or (f'{pa.author_name} maqolasi' if pa.author_name else 'Maqola'),
             year=issue.year,
             img_variant=(pa.order or 1) % 4,
             issue=issue,
+            category=category,
+            page_start=pa.start_page,
+            page_end=pa.end_page,
+            pages=(pa.end_page - pa.start_page + 1) if pa.start_page and pa.end_page else 0,
             published_at=timezone.now().date(),
         )
         if pa.article_pdf:

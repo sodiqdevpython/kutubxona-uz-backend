@@ -3,6 +3,7 @@ from django.db import models
 from django.utils import timezone
 from slugify import slugify
 from utils.models import BaseModel
+from utils.text import detect_language, normalize_text
 from utils.validators import validate_document, validate_image
 
 
@@ -86,8 +87,18 @@ class Article(BaseModel):
     # Shuning uchun maydon 0008 migratsiyasida olib tashlandi.
 
     # ── Asosiy matn ──────────────────────────────────────────────────────────
+    LANGUAGE_CHOICES = [
+        ('uz',      "O'zbek (lotin)"),
+        ('uz-cyrl', 'Ўзбек (кирилл)'),
+        ('ru',      'Русский'),
+        ('en',      'English'),
+    ]
+
     title        = models.CharField(max_length=500, verbose_name='Sarlavha')
     slug         = models.SlugField(max_length=520, unique=True, blank=True, verbose_name='Slug (URL)')
+    # Sarlavhadan saqlashda avtomatik aniqlanadi (maqolalar ro'yxatidagi «Til» filtri uchun)
+    language     = models.CharField(max_length=10, choices=LANGUAGE_CHOICES, default='uz', db_index=True,
+                                    editable=False, verbose_name='Til')
     excerpt      = models.TextField(blank=True, verbose_name='Qisqacha mazmun (abstract)')
     references   = models.TextField(blank=True, verbose_name='Adabiyotlar (References)')
     content      = models.TextField(blank=True, verbose_name="Tarkib (HTML — avtomatik to'ldiriladi)")
@@ -204,6 +215,12 @@ class Article(BaseModel):
         return '\n'.join(paragraphs)
 
     def save(self, *args, **kwargs):
+        update_fields = kwargs.get('update_fields')
+        if update_fields is None or 'title' in update_fields:
+            self.title = normalize_text(self.title)
+            self.language = detect_language(self.title)
+            if update_fields is not None:
+                kwargs['update_fields'] = {*update_fields, 'language'}
         if not self.slug:
             self.slug = self._generate_slug()
         super().save(*args, **kwargs)
@@ -215,7 +232,10 @@ class Article(BaseModel):
             return ''
 
         def fmt(a):
+            # Ota ismi bilan yozilganda familiya birinchi turadi: «Kushbakov Kamoliddin B.» → «K. Kushbakov»
             parts = a.name.split()
+            if len(parts) > 2:
+                return f'{parts[1][0]}. {parts[0]}'
             return f'{parts[0][0]}. {parts[-1]}' if len(parts) > 1 else a.name
 
         shown = auths[:2]

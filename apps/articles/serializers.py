@@ -1,3 +1,5 @@
+import os
+
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
 from apps.authors.models import Author
@@ -25,7 +27,7 @@ class AuthorBriefSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Author
         fields = ('id', 'name', 'slug', 'initials', 'avatar_idx', 'avatar_url',
-                  'org', 'role')
+                  'org', 'role', 'orcid')
 
     def get_avatar_url(self, obj) -> str | None:
         if not obj.avatar:
@@ -41,16 +43,60 @@ class ArticleListSerializer(serializers.ModelSerializer):
     author_names  = serializers.SerializerMethodField()
     image_url     = serializers.SerializerMethodField()
     keywords      = serializers.SerializerMethodField()
+    issue_id      = serializers.SerializerMethodField()
+    issue_number  = serializers.SerializerMethodField()
+    issue_year    = serializers.SerializerMethodField()
+    issue_cover_url = serializers.SerializerMethodField()
+    file_kind     = serializers.SerializerMethodField()
+    file_size     = serializers.SerializerMethodField()
 
     class Meta:
         model  = Article
         fields = (
-            'id', 'title', 'slug', 'excerpt',
+            'id', 'title', 'slug', 'excerpt', 'language', 'doi',
             'category', 'authors', 'author_label', 'author_names',
-            'year', 'quarter', 'page_start', 'page_end',
+            'year', 'quarter', 'issue_id', 'issue_number', 'issue_year', 'issue_cover_url',
+            'page_start', 'page_end',
             'pages', 'min_read', 'cites', 'views',
+            'file_kind', 'file_size',
             'img_variant', 'image_url', 'keywords', 'published_at',
         )
+
+    @extend_schema_field({'type': 'string', 'nullable': True})
+    def get_issue_cover_url(self, obj) -> str | None:
+        """Maqolaning o'z rasmi bo'lmasa, kartalarda chiqqan sonning muqovasi ko'rsatiladi."""
+        cover = obj.issue.cover_image if obj.issue_id else None
+        if not cover:
+            return None
+        request = self.context.get('request')
+        return request.build_absolute_uri(cover.url) if request else cover.url
+
+    @extend_schema_field({'type': 'string', 'nullable': True})
+    def get_file_kind(self, obj) -> str | None:
+        if not obj.source_file:
+            return None
+        return os.path.splitext(obj.source_file.name)[1].lstrip('.').lower() or None
+
+    @extend_schema_field({'type': 'integer', 'nullable': True})
+    def get_file_size(self, obj) -> int | None:
+        if not obj.source_file:
+            return None
+        try:
+            return obj.source_file.size
+        except (OSError, ValueError):
+            return None
+
+    @extend_schema_field({'type': 'string', 'nullable': True})
+    def get_issue_id(self, obj) -> str | None:
+        return str(obj.issue_id) if obj.issue_id else None
+
+    @extend_schema_field({'type': 'integer', 'nullable': True})
+    def get_issue_number(self, obj) -> int | None:
+        return obj.issue.number if obj.issue_id else None
+
+    @extend_schema_field({'type': 'integer', 'nullable': True})
+    def get_issue_year(self, obj) -> int | None:
+        return obj.issue.year if obj.issue_id else None
 
     @extend_schema_field({'type': 'array', 'items': {'type': 'string'}})
     def get_keywords(self, obj):
@@ -82,8 +128,7 @@ class ArticleDetailSerializer(ArticleListSerializer):
 
     class Meta(ArticleListSerializer.Meta):
         fields = ArticleListSerializer.Meta.fields + (
-            'doi', 'udk',
-            'content', 'source_file_url', 'keywords', 'references', 'issue', 'ai_ready',
+            'udk', 'content', 'source_file_url', 'references', 'issue', 'ai_ready',
         )
 
     @extend_schema_field({'type': 'boolean'})
@@ -146,7 +191,7 @@ class ArticleTocSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = Article
-        fields = ('id', 'title', 'slug', 'authors', 'page_start', 'page_end', 'views', 'image_url')
+        fields = ('id', 'title', 'slug', 'authors', 'page_start', 'page_end', 'views', 'image_url', 'doi')
 
     @extend_schema_field({'type': 'array', 'items': {'type': 'string'}})
     def get_authors(self, obj):

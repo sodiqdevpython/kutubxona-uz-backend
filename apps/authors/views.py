@@ -9,6 +9,7 @@ from django.conf import settings
 from .models import Author
 from .serializers import AuthorListSerializer, AuthorDetailSerializer
 from utils.request_ip import client_ip
+from utils.search import FoldedSearchFilter
 from utils.cache import CachedListMixin, NS_AUTHORS
 
 
@@ -23,7 +24,7 @@ class AuthorViewSet(CachedListMixin, viewsets.ReadOnlyModelViewSet):
         .prefetch_related('articles')
         .distinct()
     )
-    filter_backends  = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filter_backends  = [DjangoFilterBackend, FoldedSearchFilter, filters.OrderingFilter]
     search_fields    = ['name', 'org', 'role']
     ordering_fields  = ['name']
     ordering         = ['name']

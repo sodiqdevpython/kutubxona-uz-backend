@@ -1,0 +1,13 @@
+{% extends "seo/base.html" %}
+{% block title %}{{ author.name }} — {{ site_name }}{% endblock %}
+{% block description %}{% if author.org %}{{ author.name }} — {{ author.org|truncatechars:200 }}{% else %}{{ author.name }} — {{ site_name }} jurnali muallifi.{% endif %}{% endblock %}
+{% block og_title %}{{ author.name }}{% endblock %}
+{% block content %}
+<h1>{{ author.name }}</h1>
+{% if author.org %}<p>{{ author.org }}</p>{% endif %}
+{% if author.orcid %}<p>ORCID: <a href="https://orcid.org/{{ author.orcid }}">{{ author.orcid }}</a></p>{% endif %}
+<h2>Maqolalar</h2>
+<ul>
+{% for article in articles %}  <li><a href="/articles/{{ article.slug }}">{{ article.title }}</a> — {{ article.issue.year }}, № {{ article.issue.number }}</li>
+{% endfor %}</ul>
+{% endblock %}

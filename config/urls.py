@@ -21,9 +21,10 @@ from apps.articles.views  import (
     BotCheckAdminView, BotUserArticlesView, AiStatusView,
 )
 from apps.authors.views   import AuthorViewSet
-from apps.panel.views    import CaptchaConfigView
+# CAPTCHA-OFF: from apps.panel.views    import CaptchaConfigView
 from apps.journals.views  import JournalViewSet, IssueViewSet
 from apps.comments.views  import CommentViewSet
+from apps.articles        import seo
 
 # ── Admin ─────────────────────────────────────────────────────────────────────
 admin.site.site_header = 'Kutubxona Arxivi — Boshqaruv'
@@ -47,14 +48,22 @@ urlpatterns = [
     # Admin panel
     path('admin/', admin.site.urls),
 
+    # Qidiruv botlari uchun server HTML, robots.txt va sitemap.xml (frontend nginx yo'naltiradi)
+    path('api/seo/robots.txt',          seo.robots_txt,   name='seo-robots'),
+    path('api/seo/sitemap.xml',         seo.sitemap_xml,  name='seo-sitemap'),
+    path('api/seo/home',                seo.home_page,    name='seo-home'),
+    path('api/seo/articles/<slug:slug>', seo.article_page, name='seo-article'),
+    path('api/seo/archive/<uuid:pk>',   seo.issue_page,   name='seo-issue'),
+    path('api/seo/authors/<slug:slug>', seo.author_page,  name='seo-author'),
+
     # REST API (router)
     path('api/', include(router.urls)),
 
     # Local AI holati (frontend "AI ulanmagan" modalini shu bilan boshqaradi)
     path('api/ai/status/', AiStatusView.as_view(), name='ai-status'),
 
-    # CAPTCHA sozlamasi (login sahifasi uchun)
-    path('api/auth/captcha/', CaptchaConfigView.as_view(), name='captcha-config'),
+    # CAPTCHA-OFF: CAPTCHA sozlamasi (login sahifasi uchun)
+    # path('api/auth/captcha/', CaptchaConfigView.as_view(), name='captcha-config'),
 
     # Bot submission endpointlari (secret orqali himoyalangan)
     path('api/submit/draft/',         SubmissionDraftView.as_view(),       name='submit-draft'),
